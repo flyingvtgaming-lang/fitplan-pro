@@ -10,7 +10,7 @@ const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 //  EMAILJS CONFIG   ← paste your values here
 // ─────────────────────────────────────────────
 const EMAILJS_SERVICE  = "service_qekk769";
-const EMAILJS_TEMPLATE = "h4my00d";
+const EMAILJS_TEMPLATE = "template_h9fye4h";
 const EMAILJS_KEY      = "PbhegEIBztlqMZhI9";
 
 // ── Supabase client (loaded from CDN, no npm needed in artifact) ──
@@ -746,4 +746,3 @@ export default function App() {
     </>
   );
 }
- 
