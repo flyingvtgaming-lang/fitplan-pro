@@ -342,7 +342,7 @@ export default function App() {
     }catch(e){
       setCodeSent(true);
       startTimer();
-      setVerifyError("DEMO MODE — EmailJS not set up. Your code is: "+code);
+      setVerifyError("DEMO MODE — EmailJS not set up. Your code is: "+code+" Error: "+e.message+" Status: "+JSON.stringify(e));
     }finally{setSending(false);}
   };
 
