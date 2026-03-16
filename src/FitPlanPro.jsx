@@ -80,17 +80,21 @@ async function sendVerificationEmail(toEmail, code) {
 
 // ── Claude API ──
 async function askClaude(userMessage, systemPrompt) {
-  const body = { model:"claude-sonnet-4-20250514", max_tokens:1000, messages:[{role:"user",content:userMessage}] };
-  if (systemPrompt) body.system = systemPrompt;
-  const res = await fetch("https://api.anthropic.com/v1/messages", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: userMessage }], system: systemPrompt }),
+  });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return (data.content||[]).map(b=>b.text||"").join("");
 }
 async function askClaudeChat(messages, systemPrompt) {
-  const body = { model:"claude-sonnet-4-20250514", max_tokens:1000, messages };
-  if (systemPrompt) body.system = systemPrompt;
-  const res = await fetch("https://api.anthropic.com/v1/messages", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, system: systemPrompt }),
+  });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return (data.content||[]).map(b=>b.text||"").join("");
