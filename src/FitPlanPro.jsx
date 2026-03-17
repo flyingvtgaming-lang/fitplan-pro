@@ -877,6 +877,21 @@ async function dbLoadReviews(){
   return data||[];
 }
 
+async function dbLogProgress({email, entry, type}){
+  const client=await getSupabase();
+  const {error}=await client.from("progress_logs").insert({
+    email, entry, type, logged_at: new Date().toISOString()
+  });
+  if(error) console.error("Progress log error:",error);
+}
+
+async function dbLoadProgress(email){
+  const client=await getSupabase();
+  const {data,error}=await client.from("progress_logs").select("*").eq("email",email).order("logged_at",{ascending:false}).limit(50);
+  if(error) return [];
+  return data||[];
+}
+
 let ejsReady=false;
 async function sendVerificationEmail(toEmail,code){
   if(!ejsReady){
@@ -892,14 +907,14 @@ async function sendVerificationEmail(toEmail,code){
   await window.emailjs.send(EMAILJS_SERVICE,EMAILJS_TEMPLATE,{to_email:toEmail,code,app_name:"FitPlan Pro"});
 }
 
-async function askClaude(userMessage,systemPrompt){
-  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:userMessage}],system:systemPrompt})});
+async function askClaude(userMessage,systemPrompt,flags={}){
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:userMessage}],system:systemPrompt,...flags})});
   const data=await res.json();
   if(data.error) throw new Error(data.error.message);
   return (data.content||[]).map(b=>b.text||"").join("");
 }
-async function askClaudeChat(messages,systemPrompt){
-  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,system:systemPrompt})});
+async function askClaudeChat(messages,systemPrompt,flags={}){
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,system:systemPrompt,...flags})});
   const data=await res.json();
   if(data.error) throw new Error(data.error.message);
   return (data.content||[]).map(b=>b.text||"").join("");
@@ -1086,6 +1101,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
 .pro-upsell{background:linear-gradient(135deg,rgba(245,197,66,.1),rgba(245,197,66,.05));border:1px solid rgba(245,197,66,.25);border-radius:13px;padding:18px;margin-bottom:18px;text-align:center;}
 .pro-upsell-title{font-family:var(--syne);font-size:17px;font-weight:800;color:var(--gold);margin-bottom:7px;}
 .pro-upsell-sub{font-size:13px;color:var(--muted2);margin-bottom:14px;line-height:1.6;}
+.progress-log{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;}
+.progress-log-icon{font-size:20px;flex-shrink:0;margin-top:1px;}
+.progress-log-body{flex:1;}
+.progress-log-entry{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:4px;}
+.progress-log-meta{font-size:11px;color:var(--muted);}
+.progress-type{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;margin-right:6px;}
+.progress-type.workout{background:var(--green-bg2);color:var(--green);}
+.progress-type.cardio{background:rgba(0,180,255,0.15);color:#00b4ff;}
+.progress-type.weight{background:rgba(245,197,66,0.15);color:var(--gold);}
+.saved-flash{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:10px 20px;border-radius:100px;font-family:var(--syne);font-size:13px;font-weight:700;z-index:100;animation:fadeUp .3s ease;}
 .trust-bar{display:flex;gap:0;border-top:1px solid var(--border);padding:14px 0 0;margin-top:16px;flex-wrap:wrap;justify-content:center;gap:16px;}
 .trust-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2);}
 .trust-item span{font-size:14px;}
@@ -1111,9 +1136,9 @@ export default function App() {
   const [country,setCountry]=useState("");
   const [langCode,setLangCode]=useState("en");
   const isMetric = METRIC_COUNTRIES.includes(country);
-  // For languages not fully hardcoded, we use English as base but pass langCode to Claude for AI responses
-const t = T[langCode] || T.en;
-const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
+  const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
+const [t, setT] = useState(T[langCode] || T.en);
+const [translating, setTranslating] = useState(false);
 
   const [email,setEmail]=useState("");
   const [sentCode,setSentCode]=useState("");
@@ -1161,8 +1186,20 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
   const [reviewSubmitted,setReviewSubmitted]=useState(false);
   const [hoverStar,setHoverStar]=useState(0);
   const [loadingReviews,setLoadingReviews]=useState(false);
+  const [progressLogs,setProgressLogs]=useState([]);
+  const [loadingProgress,setLoadingProgress]=useState(false);
+  const [progressSaved,setProgressSaved]=useState(false);
 
-  useEffect(()=>{if(dashTab==="reviews") loadReviews();},[dashTab]);
+  useEffect(()=>{
+    if(dashTab==="reviews") loadReviews();
+    if(dashTab==="progress"){
+      setLoadingProgress(true);
+      dbLoadProgress(email).then(logs=>{
+        setProgressLogs(logs);
+        setLoadingProgress(false);
+      });
+    }
+  },[dashTab]);
   useEffect(()=>{
     if(step===2){
       setOnboardReviewsLoading(true);
@@ -1210,8 +1247,157 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
       "sw":["Kenya","Nigeria","South Africa"],
     };
     const found = Object.entries(map).find(([code,countries])=>countries.includes(country));
-    setLangCode(found ? found[0] : "en");
+    const newCode = found ? found[0] : "en";
+    setLangCode(newCode);
   },[country]);
+
+  // dynamic translation using Claude for unsupported languages
+  useEffect(()=>{
+    if(!langCode) return;
+    if(T[langCode]){
+      setT(T[langCode]);
+      return;
+    }
+    // language not hardcoded — ask Claude to translate
+    const lang = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
+    setTranslating(true);
+    const base = T.en;
+    const stringsToTranslate = {
+      appTagline: base.appTagline,
+      verifyTitle: base.verifyTitle,
+      verifySub: base.verifySub,
+      sendCode: base.sendCode,
+      sending: base.sending,
+      checkInbox: base.checkInbox,
+      codeSentTo: base.codeSentTo,
+      enterBelow: base.enterBelow,
+      emailVerified: base.emailVerified,
+      verifiedSub: base.verifiedSub,
+      verifyBtn: base.verifyBtn,
+      verifying: base.verifying,
+      resendIn: base.resendIn,
+      resend: base.resend,
+      changeEmail: base.changeEmail,
+      locationTitle: base.locationTitle,
+      locationEm: base.locationEm,
+      locationSub: base.locationSub,
+      country: base.country,
+      language: base.language,
+      reviewsTitle: base.reviewsTitle,
+      reviewsEm: base.reviewsEm,
+      reviewsSub: base.reviewsSub,
+      noReviews: base.noReviews,
+      noReviewsSub: base.noReviewsSub,
+      profileTitle: base.profileTitle,
+      profileEm: base.profileEm,
+      profileSub: base.profileSub,
+      firstName: base.firstName,
+      age: base.age,
+      weight: base.weight,
+      height: base.height,
+      fitnessLevel: base.fitnessLevel,
+      diet: base.diet,
+      goalTitle: base.goalTitle,
+      goalEm: base.goalEm,
+      goalSub: base.goalSub,
+      equipTitle: base.equipTitle,
+      equipEm: base.equipEm,
+      equipSub: base.equipSub,
+      planTitle: base.planTitle,
+      planEm: base.planEm,
+      planSub: base.planSub,
+      basic: base.basic,
+      pro: base.pro,
+      free: base.free,
+      perMonth: base.perMonth,
+      mostPopular: base.mostPopular,
+      generateFree: base.generateFree,
+      startPro: base.startPro,
+      back: base.back,
+      continue: base.continue,
+      myPlan: base.myPlan,
+      aiCoach: base.aiCoach,
+      grocery: base.grocery,
+      groceryLocked: base.groceryLocked,
+      reviews: base.reviews,
+      profile: base.profile,
+      yourPlan: base.yourPlan,
+      dayPlan: base.dayPlan,
+      goal: base.goal,
+      level: base.level,
+      equip: base.equip,
+      workoutPlan: base.workoutPlan,
+      mealPlan: base.mealPlan,
+      regenerate: base.regenerate,
+      regenerating: base.regenerating,
+      freeLimit: base.freeLimit,
+      upgradePro: base.upgradePro,
+      upgradeBtn: base.upgradeBtn,
+      proActive: base.proActive,
+      proActiveSub: base.proActiveSub,
+      coachTitle: base.coachTitle,
+      coachSub: base.coachSub,
+      coachPlaceholder: base.coachPlaceholder,
+      send: base.send,
+      groceryTitle: base.groceryTitle,
+      grocerySub: base.grocerySub,
+      noGrocery: base.noGrocery,
+      proFeature: base.proFeature,
+      proUpsellSub: base.proUpsellSub,
+      upgradeProFull: base.upgradeProFull,
+      reviewsTabTitle: base.reviewsTabTitle,
+      reviewsTabSub: base.reviewsTabSub,
+      leaveReview: base.leaveReview,
+      profileTab: base.profileTab,
+      profileTabSub: base.profileTabSub,
+      startOver: base.startOver,
+      subscription: base.subscription,
+      building: base.building,
+      personalized: base.personalized,
+      aboutTime: base.aboutTime,
+      savedBanner: base.savedBanner,
+      howDoing: base.howDoing,
+      modifyWorkout: base.modifyWorkout,
+      lunchEat: base.lunchEat,
+      missedWorkout: base.missedWorkout,
+      motivation: base.motivation,
+      logProgress: base.logProgress,
+      explainEx: base.explainEx,
+      soreMuscle: base.soreMuscle,
+      rateExp: base.rateExp,
+      rateSub: base.rateSub,
+      submitReview: base.submitReview,
+      skip: base.skip,
+    };
+    askClaude(
+      "Translate these JSON strings into "+lang+". Return ONLY valid JSON, no markdown, no explanation. Keep emoji and special characters. Keep the exact same JSON keys. Here is the JSON: "+JSON.stringify(stringsToTranslate),
+      "You are a professional translator. Return only valid JSON with the same keys as the input, with all string values translated into "+lang+". Do not translate keys. Do not add markdown. Do not add any text outside the JSON.",
+      {isTranslation:true}
+    ).then(result=>{
+      try{
+        const cleaned = result.replace(/^$/,"").trim();
+        const translated = JSON.parse(cleaned);
+        // merge with base to keep non-translated fields like arrays
+        setT({
+          ...base,
+          ...translated,
+          steps: base.steps, // keep steps in English for now
+          levels: base.levels,
+          diets: base.diets,
+          goals: base.goals,
+          equipment: base.equipment,
+          pfeats: base.pfeats,
+        });
+      }catch(e){
+        console.error("Translation parse error:",e);
+        setT(base); // fallback to English
+      }
+      setTranslating(false);
+    }).catch(()=>{
+      setT(base);
+      setTranslating(false);
+    });
+  },[langCode]);
 
   const startTimer=()=>{
     setResendTimer(60);
@@ -1326,7 +1512,8 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
       setProgress(20);
       const workout=await askClaude(
         "Create a "+daysCount+"-day workout plan for: "+ctx+". Write Day 1 through Day "+daysCount+". For each workout day list 4-6 exercises with sets and reps. Mark rest days. Be concise. Respond in the same language as: "+langCode,
-        "You are a personal trainer. Write workout plans in plain text. No markdown. Label each day."
+        "You are a personal trainer. Write workout plans in plain text. No markdown. Label each day.",
+        {isPlanGeneration:true,isPro:plan==="pro"}
       );
       setWorkoutPlan(workout);
       setProgress(55);
@@ -1353,7 +1540,11 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
       setDashTab("plan");
       setTimeout(()=>setShowReviewForm(true),3000);
     }catch(err){
-      setGenError("Error: "+err.message);
+      if(err.message && err.message.includes("PLAN_LIMIT_REACHED") || err.message.includes("Free plan limit")){
+        setGenError(err.message);
+      } else {
+        setGenError("Error: "+err.message);
+      }
     }finally{
       setGenerating(false);
       setRegenerating(false);
@@ -1368,10 +1559,25 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
     const goalLabel=t.goals.find(g=>g.id===goal)?.title||"";
     const history=msgs.map(m=>({role:m.role==="bot"?"assistant":"user",content:m.text}));
     history.push({role:"user",content:text});
-    const sys="You are an expert AI personal trainer and nutritionist. You know this user: Name: "+profile.name+", Age: "+profile.age+", Weight: "+profile.weight+", Goal: "+goalLabel+", Level: "+profile.level+", Diet: "+profile.diet+", Country: "+country+". Their workout plan: "+workoutPlan.slice(0,300)+"... Be encouraging and specific. Under 150 words. Respond in language: "+langCode;
+
+    // detect progress logging keywords
+    const progressKeywords=["sets","reps","lbs","kg","km","miles","minutes","completed","finished","did","ran","lifted","bench","squat","deadlift","log","logged","weigh","weight today","pb","pr","personal record","personal best"];
+    const isProgressLog = progressKeywords.some(k=>text.toLowerCase().includes(k));
+
+    const sys="You are an expert AI personal trainer and nutritionist named Coach. You know this user: Name: "+profile.name+", Age: "+profile.age+", Weight: "+profile.weight+", Goal: "+goalLabel+", Level: "+profile.level+", Diet: "+profile.diet+", Country: "+country+". Their workout plan: "+workoutPlan.slice(0,300)+"... Be encouraging and specific. Under 150 words. Respond in language: "+langCode+(isProgressLog?". The user is logging progress — acknowledge it enthusiastically, confirm what they logged, and give a motivating follow-up tip.":"");
+
     try{
       const reply=await askClaudeChat(history,sys);
       setMsgs(m=>[...m,{role:"bot",text:reply}]);
+
+      // save progress log to Supabase if it looks like a log entry
+      if(isProgressLog && email){
+        const type = text.toLowerCase().includes("weight") || text.toLowerCase().includes("weigh") ? "weight" :
+                     text.toLowerCase().includes("ran") || text.toLowerCase().includes("km") || text.toLowerCase().includes("miles") ? "cardio" : "workout";
+        await dbLogProgress({email, entry: text, type});
+        setProgressSaved(true);
+        setTimeout(()=>setProgressSaved(false), 3000);
+      }
     }catch(e){
       setMsgs(m=>[...m,{role:"bot",text:"Sorry, couldn't connect: "+e.message}]);
     }finally{setChatBusy(false);}
@@ -1416,10 +1622,12 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
           </div>
         </header>
         <nav className="dnav">
-          {[[" plan",t.myPlan],["chat",t.aiCoach],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
+          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
             <button key={id} className={["dtab",dashTab===id.trim()?"active":""].filter(Boolean).join(" ")} onClick={()=>setDashTab(id.trim())}>{lbl}</button>
           ))}
         </nav>
+
+        {progressSaved&&<div className="saved-flash">💾 Progress logged!</div>}
 
         {showReviewForm&&!reviewSubmitted&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -1512,6 +1720,51 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
                   <div className="pro-upsell-sub">{t.proUpsellSub}</div>
                   <button className="btn-gold" style={{width:"100%"}}>{t.upgradeProFull}</button>
                 </div>
+              )}
+            </>}
+
+            {dashTab==="progress"&&<>
+              <div className="page-heading" style={{marginBottom:4}}>Your <em>Progress</em></div>
+              <p className="page-sub" style={{marginBottom:16}}>Logged automatically when you tell your AI Coach about workouts, weight, or cardio.</p>
+              <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 16px",marginBottom:18,fontSize:13,color:"var(--muted2)"}}>
+                💡 <strong style={{color:"var(--text)"}}>How to log:</strong> Just tell your AI Coach things like "I did 3 sets of bench at 185lbs" or "ran 5km today" or "I weigh 172lbs now" — it saves automatically.
+              </div>
+              {loadingProgress?(
+                <div style={{textAlign:"center",padding:30}}><span className="spin"/></div>
+              ):progressLogs.length===0?(
+                <div style={{textAlign:"center",padding:"40px 20px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:13}}>
+                  <div style={{fontSize:34,marginBottom:10}}>📊</div>
+                  <div style={{fontFamily:"var(--syne)",fontSize:15,fontWeight:700,marginBottom:6}}>No logs yet</div>
+                  <div style={{fontSize:13,color:"var(--muted2)"}}>Go to AI Coach and tell it about your workouts to start tracking!</div>
+                </div>
+              ):(
+                <>
+                  <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+                    {[
+                      ["💪","workout",progressLogs.filter(l=>l.type==="workout").length,"Workouts"],
+                      ["🏃","cardio",progressLogs.filter(l=>l.type==="cardio").length,"Cardio"],
+                      ["⚖️","weight",progressLogs.filter(l=>l.type==="weight").length,"Weight Logs"],
+                    ].map(([icon,type,count,label])=>(
+                      <div key={type} style={{flex:1,minWidth:80,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:11,padding:"12px",textAlign:"center"}}>
+                        <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+                        <div style={{fontFamily:"var(--syne)",fontSize:20,fontWeight:800}}>{count}</div>
+                        <div style={{fontSize:11,color:"var(--muted)"}}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {progressLogs.map((log,i)=>(
+                    <div key={i} className="progress-log">
+                      <div className="progress-log-icon">{log.type==="workout"?"💪":log.type==="cardio"?"🏃":"⚖️"}</div>
+                      <div className="progress-log-body">
+                        <div className="progress-log-entry">{log.entry}</div>
+                        <div className="progress-log-meta">
+                          <span className={"progress-type "+log.type}>{log.type}</span>
+                          {new Date(log.logged_at).toLocaleDateString()} at {new Date(log.logged_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
               )}
             </>}
 
@@ -1627,6 +1880,11 @@ const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
 
         {/* STEP 1 — Location */}
         {step===1&&<div className="page-scroll"><div className="page-inner">
+          {translating&&<div style={{position:"fixed",inset:0,background:"rgba(8,12,16,0.9)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+            <span className="spin" style={{width:32,height:32,borderWidth:3}}/>
+            <div style={{fontFamily:"var(--syne)",fontSize:16,fontWeight:700,color:"var(--green)"}}>Translating UI…</div>
+            <div style={{fontSize:13,color:"var(--muted2)"}}>Powered by Claude AI</div>
+          </div>}
           <h1 className="page-heading">{t.locationTitle}<br/><em>{t.locationEm}</em></h1>
           <p className="page-sub">{t.locationSub}</p>
           <div className="field">
