@@ -1790,8 +1790,7 @@ export default function App() {
   const [country,setCountry]=useState("");
   const [langCode,setLangCode]=useState("en");
   const isMetric = METRIC_COUNTRIES.includes(country);
-  const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
-const [t, setT] = useState(T[langCode] || T.en);
+  const [t, setT] = useState(T[langCode] || T.en);
 const [translating, setTranslating] = useState(false);
 
   const [email,setEmail]=useState("");
@@ -1853,7 +1852,7 @@ const [translating, setTranslating] = useState(false);
         setLoadingProgress(false);
       });
     }
-  },[dashTab]);
+  },[dashTab, email]);
   useEffect(()=>{
     if(step===2){
       setOnboardReviewsLoading(true);
@@ -2195,7 +2194,7 @@ const [translating, setTranslating] = useState(false);
       setDashTab("plan");
       setTimeout(()=>setShowReviewForm(true),3000);
     }catch(err){
-      if(err.message && err.message.includes("PLAN_LIMIT_REACHED") || err.message.includes("Free plan limit")){
+      if(err.message && (err.message.includes("PLAN_LIMIT_REACHED") || err.message.includes("Free plan limit"))){
         setGenError(err.message);
       } else {
         setGenError("Error: "+err.message);
