@@ -1,3 +1,4 @@
+// FitPlan Pro v2.1 - multilingual
 import { useState, useRef, useEffect, Fragment } from "react";
 
 const SUPABASE_URL  = "https://oapcqfahkynkgxqkyeru.supabase.co";
