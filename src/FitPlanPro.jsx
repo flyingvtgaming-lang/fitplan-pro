@@ -776,7 +776,7 @@ const T = {
 };
 
 // Metric countries (use kg/cm)
-const METRIC_COUNTRIES = ["Germany","France","Spain","Italy","Portugal","Netherlands","Belgium","Sweden","Norway","Denmark","Finland","Austria","Switzerland","Poland","Czech Republic","Hungary","Romania","Greece","Brazil","Mexico","Argentina","Colombia","Chile","Japan","South Korea","China","India","Australia","New Zealand","Russia","Turkey","South Africa","Egypt","Nigeria","Kenya","Morocco","Saudi Arabia","UAE","Israel","Singapore","Malaysia","Thailand","Vietnam","Indonesia","Philippines"];
+const METRIC_COUNTRIES = ["Germany","France","Spain","Italy","Portugal","Netherlands","Belgium","Sweden","Norway","Denmark","Finland","Austria","Switzerland","Poland","Czech Republic","Hungary","Romania","Greece","Ukraine","Brazil","Mexico","Argentina","Colombia","Chile","Japan","South Korea","China","India","Australia","New Zealand","Russia","Turkey","South Africa","Egypt","Nigeria","Kenya","Morocco","Saudi Arabia","UAE","Israel","Singapore","Malaysia","Thailand","Vietnam","Indonesia","Philippines"];
 
 const LANGUAGES = [
   {code:"en",name:"English",flag:"🇺🇸"},
@@ -786,6 +786,27 @@ const LANGUAGES = [
   {code:"pt",name:"Português",flag:"🇧🇷"},
   {code:"it",name:"Italiano",flag:"🇮🇹"},
   {code:"ja",name:"日本語",flag:"🇯🇵"},
+  {code:"ko",name:"한국어",flag:"🇰🇷"},
+  {code:"zh",name:"中文",flag:"🇨🇳"},
+  {code:"ar",name:"العربية",flag:"🇸🇦"},
+  {code:"hi",name:"हिन्दी",flag:"🇮🇳"},
+  {code:"ru",name:"Русский",flag:"🇷🇺"},
+  {code:"uk",name:"Українська",flag:"🇺🇦"},
+  {code:"pl",name:"Polski",flag:"🇵🇱"},
+  {code:"nl",name:"Nederlands",flag:"🇳🇱"},
+  {code:"sv",name:"Svenska",flag:"🇸🇪"},
+  {code:"tr",name:"Türkçe",flag:"🇹🇷"},
+  {code:"id",name:"Bahasa Indonesia",flag:"🇮🇩"},
+  {code:"vi",name:"Tiếng Việt",flag:"🇻🇳"},
+  {code:"th",name:"ภาษาไทย",flag:"🇹🇭"},
+  {code:"ro",name:"Română",flag:"🇷🇴"},
+  {code:"el",name:"Ελληνικά",flag:"🇬🇷"},
+  {code:"he",name:"עברית",flag:"🇮🇱"},
+  {code:"cs",name:"Čeština",flag:"🇨🇿"},
+  {code:"hu",name:"Magyar",flag:"🇭🇺"},
+  {code:"ms",name:"Bahasa Melayu",flag:"🇲🇾"},
+  {code:"tl",name:"Filipino",flag:"🇵🇭"},
+  {code:"sw",name:"Kiswahili",flag:"🇰🇪"},
 ];
 
 const COUNTRIES = ["United States","United Kingdom","Canada","Australia","Germany","France","Spain","Italy","Portugal","Netherlands","Belgium","Sweden","Norway","Denmark","Finland","Austria","Switzerland","Poland","Czech Republic","Hungary","Romania","Greece","Brazil","Mexico","Argentina","Colombia","Chile","Japan","South Korea","China","India","New Zealand","Russia","Turkey","South Africa","Egypt","Nigeria","Kenya","Morocco","Saudi Arabia","UAE","Israel","Singapore","Malaysia","Thailand","Vietnam","Indonesia","Philippines","Other"];
@@ -1090,7 +1111,9 @@ export default function App() {
   const [country,setCountry]=useState("");
   const [langCode,setLangCode]=useState("en");
   const isMetric = METRIC_COUNTRIES.includes(country);
-  const t = T[langCode] || T.en;
+  // For languages not fully hardcoded, we use English as base but pass langCode to Claude for AI responses
+const t = T[langCode] || T.en;
+const langName = LANGUAGES.find(l=>l.code===langCode)?.name || "English";
 
   const [email,setEmail]=useState("");
   const [sentCode,setSentCode]=useState("");
@@ -1157,13 +1180,37 @@ export default function App() {
   // auto-set language when country changes
   useEffect(()=>{
     if(!country) return;
-    if(["Germany","Austria","Switzerland"].includes(country)) setLangCode("de");
-    else if(["France","Belgium"].includes(country)) setLangCode("fr");
-    else if(["Spain","Mexico","Argentina","Colombia","Chile"].includes(country)) setLangCode("es");
-    else if(["Brazil","Portugal"].includes(country)) setLangCode("pt");
-    else if(["Italy"].includes(country)) setLangCode("it");
-    else if(["Japan"].includes(country)) setLangCode("ja");
-    else setLangCode("en");
+    const map = {
+      "de":["Germany","Austria","Switzerland"],
+      "fr":["France","Belgium"],
+      "es":["Spain","Mexico","Argentina","Colombia","Chile"],
+      "pt":["Brazil","Portugal"],
+      "it":["Italy"],
+      "ja":["Japan"],
+      "ko":["South Korea"],
+      "zh":["China"],
+      "ar":["Saudi Arabia","UAE","Egypt","Morocco"],
+      "hi":["India"],
+      "ru":["Russia"],
+      "uk":["Ukraine"],
+      "pl":["Poland"],
+      "nl":["Netherlands"],
+      "sv":["Sweden","Norway","Denmark","Finland"],
+      "tr":["Turkey"],
+      "id":["Indonesia"],
+      "vi":["Vietnam"],
+      "th":["Thailand"],
+      "ro":["Romania"],
+      "el":["Greece"],
+      "he":["Israel"],
+      "cs":["Czech Republic"],
+      "hu":["Hungary"],
+      "ms":["Malaysia","Singapore"],
+      "tl":["Philippines"],
+      "sw":["Kenya","Nigeria","South Africa"],
+    };
+    const found = Object.entries(map).find(([code,countries])=>countries.includes(country));
+    setLangCode(found ? found[0] : "en");
   },[country]);
 
   const startTimer=()=>{
