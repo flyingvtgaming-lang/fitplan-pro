@@ -3014,6 +3014,23 @@ const [translating, setTranslating] = useState(false);
     } catch(e){ console.error("Memory save error:", e); }
   };
 
+  const summarizeSession = async()=>{
+    if(msgs.length < 3 || !email) return;
+    try{
+      const goalLabel = t.goals.find(g=>g.id===goal)?.title||"";
+      const chatHistory = msgs.slice(-20).map(m=>(m.role==="bot"?"Coach":"User")+": "+m.text).join("\n");
+      const summary = await askClaude(
+        "Summarize this fitness coaching session in 100 words max. Focus on: what was logged, injuries, advice given, next steps. User: "+profile.name+", Goal: "+goalLabel+".\n\n"+chatHistory,
+        "You are summarizing a fitness coaching session. Be concise. Write in third person."
+      );
+      const today = "["+new Date().toLocaleDateString()+"] ";
+      const newMemory = (coachMemory ? coachMemory+"\n\n" : "") + today + summary;
+      const trimmed = newMemory.slice(-3000);
+      setCoachMemory(trimmed);
+      await dbSaveCoachMemory(email, trimmed);
+    }catch(e){ console.error("Memory save error:", e); }
+  };
+
   // Save session summary when leaving chat tab
   useEffect(()=>{
     return ()=>{ if(dashTab==="chat" && msgs.length>3) summarizeSession(); };
