@@ -2940,7 +2940,7 @@ const [translating, setTranslating] = useState(false);
             role:"user",
             content:[
               {type:"image", source:{type:"base64", media_type:scanImage.type||"image/jpeg", data:scanImageBase64}},
-              {type:"text", text:"Analyze this food photo. The user follows a "+profile.diet+" diet and their goal is "+goalLabel+". Respond ONLY with valid JSON, no markdown. Use this structure: {foods:[{name:string,portion:string,calories:number,protein_g:number,carbs_g:number,fat_g:number,fiber_g:number,vitamins:string}],total_calories:number,total_protein_g:number,total_carbs_g:number,total_fat_g:number,total_fiber_g:number,on_plan:boolean,plan_match_reason:string,health_score:number,notes:string}"}. Be accurate with portions visible in the image."}
+              {type:"text", text:"Analyze this food photo. User diet: "+profile.diet+". Goal: "+goalLabel+". Return ONLY valid JSON with no markdown or explanation. Fields: foods array with name/portion/calories/protein_g/carbs_g/fat_g/fiber_g/vitamins per item, plus total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g, on_plan boolean, plan_match_reason string, health_score number 1-10, notes string."}
             ]
           }],
           system:"You are a professional nutritionist and dietitian. Analyze food photos and return accurate nutritional information as JSON only. No markdown, no explanation, just the JSON object."
