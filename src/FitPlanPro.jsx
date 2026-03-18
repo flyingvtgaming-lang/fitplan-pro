@@ -727,8 +727,7 @@ export default function App(){
   const [grocTab,setGrocTab]=useState("list");
 
   // ── lang ──
-  const [translating,setTranslating]=useState(false);
-  const [savedFlash,setSavedFlash]=useState(false);
+    const [savedFlash,setSavedFlash]=useState(false);
 
   const isMetricCountry=METRIC_C.includes(country);
   const unit=isMetric?"metric":"imperial";
@@ -1059,7 +1058,7 @@ export default function App(){
       {/* STEP 1 — LOCATION */}
       {screen==="onboard"&&step===1&&<>
         <div className="pscroll"><div className="pinner">
-          {translating&&<div className="trans-overlay"><span className="spin spin-lg"/><div style={{fontFamily:"var(--syne)",fontSize:15,fontWeight:700,color:"var(--gr)"}}>Translating UI…</div></div>}
+          
           <div className="ph">Where are<br/><em>you located?</em></div>
           <p className="ps">We'll set your units and language automatically.</p>
           <div className="field">
