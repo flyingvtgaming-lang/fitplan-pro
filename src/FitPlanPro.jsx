@@ -2940,7 +2940,7 @@ const [translating, setTranslating] = useState(false);
             role:"user",
             content:[
               {type:"image", source:{type:"base64", media_type:scanImage.type||"image/jpeg", data:scanImageBase64}},
-              {type:"text", text:"Analyze this food photo. Return ONLY a JSON object with these exact fields: {"foods": [list of foods identified], "total_calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number, "vitamins": "brief list of key vitamins", "on_plan": true or false based on whether this matches a "+profile.diet+" diet for "+goalLabel+", "advice": "1 sentence of nutritional advice", "points": number between 5-25 based on how healthy and on-plan this meal is"}. Be accurate with portions visible in the image."}
+              {type:"text", text:"Analyze this food photo. The user follows a "+profile.diet+" diet and their goal is "+goalLabel+". Respond ONLY with valid JSON, no markdown. Use this structure: {foods:[{name:string,portion:string,calories:number,protein_g:number,carbs_g:number,fat_g:number,fiber_g:number,vitamins:string}],total_calories:number,total_protein_g:number,total_carbs_g:number,total_fat_g:number,total_fiber_g:number,on_plan:boolean,plan_match_reason:string,health_score:number,notes:string}"}. Be accurate with portions visible in the image."}
             ]
           }],
           system:"You are a professional nutritionist and dietitian. Analyze food photos and return accurate nutritional information as JSON only. No markdown, no explanation, just the JSON object."
@@ -3415,46 +3415,6 @@ const [translating, setTranslating] = useState(false);
                     }}/>
                   </div>
                 </div>
-
-                {/* Filter by rank */}
-                <div className="rank-tabs">
-                  {["All",...RANKS.map(r=>r.name)].map(r=>(
-                    <button key={r} className={["rank-tab",lbFilter===r?"active":""].filter(Boolean).join(" ")} onClick={()=>setLbFilter(r)}>
-                      {r==="All"?"All":RANKS.find(rk=>rk.name===r)?.icon+" "+r}
-                    </button>
-                  ))}
-                </div>
-
-                {loadingLeaderboard?(
-                  <div style={{textAlign:"center",padding:30}}><span className="spin"/></div>
-                ):filtered.length===0?(
-                  <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
-                    <div style={{fontSize:30,marginBottom:8}}>🏆</div>
-                    <div>No users in this rank yet — be the first!</div>
-                  </div>
-                ):filtered.map((u,i)=>{
-                  const pos = leaderboard.findIndex(l=>l.name===u.name&&l.points===u.points)+1;
-                  const rank = RANKS.find(r=>r.name===u.rank)||RANKS[0];
-                  return (
-                    <div key={i} className="leader-row" style={{border: u.name===profile.name?"1px solid var(--green)":"1px solid var(--border)"}}>
-                      <div className={["leader-pos",pos<=3?"top3":""].filter(Boolean).join(" ")}>
-                        {pos===1?"🥇":pos===2?"🥈":pos===3?"🥉":"#"+pos}
-                      </div>
-                      <span style={{fontSize:18}}>{rank.icon}</span>
-                      <div className="leader-name">
-                        {u.name}
-                        {u.name===profile.name&&<span style={{fontSize:10,color:"var(--green)",marginLeft:6}}>(you)</span>}
-                      </div>
-                      <div className="leader-right">
-                        {u.streak>0&&<span className="streak-badge">🔥{u.streak}</span>}
-                        {u.plan==="pro"&&<span className="pro-pill">PRO</span>}
-                        <span className="leader-pts">{u.points} pts</span>
-                      </div>
-                    </div>
-                  );
-                })}
-
-
 
             {dashTab==="social"&&<SocialTab
               email={email}
