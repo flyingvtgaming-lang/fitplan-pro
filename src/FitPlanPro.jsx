@@ -1688,21 +1688,33 @@ async function dbGetUsersByEmails(emails){
   return data||[];
 }
 
-async function dbSaveProgressPhoto({email, note, weightAtTime}){
+async function dbSaveFoodScan({email, foodDescription, calories, proteinG, carbsG, fatG, vitamins, scanResult, pointsAwarded, onPlan}){
   const client = await getSupabase();
-  const {data, error} = await client.from("progress_photos")
-    .insert({email, note, weight_at_time: weightAtTime, created_at: new Date().toISOString()})
+  const {data, error} = await client.from("food_scans")
+    .insert({email, food_description: foodDescription, calories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, vitamins, scan_result: scanResult, points_awarded: pointsAwarded, on_plan: onPlan, created_at: new Date().toISOString()})
     .select().single();
-  if(error) console.error("Photo save error:", error);
+  if(error) console.error("Food scan save error:", error);
   return data;
 }
 
-async function dbGetProgressPhotos(email){
+async function dbGetFoodScans(email){
   const client = await getSupabase();
-  const {data} = await client.from("progress_photos")
+  const {data} = await client.from("food_scans")
     .select("*").eq("email", email)
-    .order("created_at", {ascending: false});
+    .order("created_at", {ascending: false})
+    .limit(50);
   return data||[];
+}
+
+async function dbSaveCoachMemory(email, memory){
+  const client = await getSupabase();
+  await client.from("users").update({coach_memory: memory, last_session_summary: new Date().toISOString()}).eq("email", email);
+}
+
+async function dbLoadCoachMemory(email){
+  const client = await getSupabase();
+  const {data} = await client.from("users").select("coach_memory").eq("email", email).single();
+  return data?.coach_memory || "";
 }
 
 let ejsReady=false;
@@ -1942,6 +1954,43 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
 .points-fill{height:100%;border-radius:4px;transition:width .6s ease;}
 .expired-overlay{position:fixed;inset:0;background:rgba(8,12,16,.97);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
 .expired-card{background:var(--bg2);border:1px solid rgba(245,197,66,.3);border-radius:20px;padding:36px;max-width:440px;width:100%;text-align:center;}
+/* Food scan styles */
+.macro-bar-wrap{margin:3px 0;}
+.macro-label{font-size:10px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:2px;}
+.macro-bar{height:4px;background:var(--bg3);border-radius:4px;overflow:hidden;}
+.macro-fill{height:100%;border-radius:4px;}
+.macro-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--bg3);border-radius:10px;padding:10px;margin:6px 0;}
+.macro-cell{text-align:center;}
+.macro-cell-val{font-family:var(--syne);font-size:13px;font-weight:800;}
+.macro-cell-label{font-size:9px;color:var(--muted);margin-top:1px;text-transform:uppercase;letter-spacing:.06em;}
+.daily-totals{background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:10px;padding:10px 12px;margin:8px 0;}
+.scan-result-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;}
+.scan-food-item{display:inline-block;background:var(--bg3);border-radius:100px;padding:3px 10px;font-size:11px;margin:2px;color:#f0f4f8;}
+.on-plan-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;}
+.on-plan-badge.yes{background:rgba(0,229,160,0.15);color:var(--green);}
+.on-plan-badge.no{background:rgba(255,77,109,0.12);color:var(--red);}
+.scan-history-item{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:8px;}
+.plan-content-wrap{position:relative;}
+.macro-inline{font-size:11px;color:var(--muted2);background:var(--bg3);border-radius:6px;padding:3px 8px;margin-top:3px;display:inline-block;}
+/* Food scan styles */
+.macro-bar-wrap{margin:3px 0 8px;}
+.macro-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.macro-label{font-size:10px;font-weight:700;color:var(--muted);width:52px;flex-shrink:0;text-transform:uppercase;letter-spacing:.05em;}
+.macro-track{flex:1;height:6px;background:var(--bg3);border-radius:4px;overflow:hidden;}
+.macro-fill{height:100%;border-radius:4px;transition:width .5s ease;}
+.macro-val{font-size:11px;font-weight:700;width:40px;text-align:right;flex-shrink:0;}
+.macro-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;margin:2px;}
+.scan-result-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:14px;}
+.scan-food-item{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);}
+.scan-food-item:last-child{border-bottom:none;}
+.scan-food-name{font-size:13px;font-weight:600;color:#f0f4f8;}
+.scan-food-portion{font-size:11px;color:var(--muted2);margin-top:2px;}
+.scan-total{background:var(--bg3);border-radius:10px;padding:12px;margin-top:12px;}
+.on-plan-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:700;margin-bottom:10px;}
+.scan-history-item{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:9px;}
+.upload-zone{background:var(--bg3);border:2px dashed var(--border2);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:12px;}
+.upload-zone:hover{border-color:var(--green);background:var(--green-bg);}
+.upload-zone.has-image{border-color:var(--green);background:var(--green-bg);}
 /* Social styles */
 .social-tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--bg2);border-radius:10px;padding:4px;border:1px solid var(--border);}
 .social-tab{flex:1;padding:8px;border-radius:7px;border:none;background:transparent;font-family:var(--syne);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -2101,72 +2150,127 @@ function SocialTab({email,profile,plan,following,followers,friendProfiles,search
   </>);
 }
 
-function PhotosTab({email,profile,progressPhotos,photoNote,setPhotoNote,photoWeight,setPhotoWeight,savingPhoto,photoSaved,saveProgressPhoto}){
-  return(<>
-    <div className="page-heading" style={{marginBottom:4}}>📸 <em>Progress Photos</em></div>
-    <p className="page-sub" style={{marginBottom:14}}>Log your weekly progress. Over time you will see your transformation.</p>
+function FoodScanTab({email,profile,plan,goal,foodScans,scanImage,scanImageBase64,scanning,scanResult,scanError,handleImageSelect,scanFood,userPoints,t,GOALS}){
+  const goalLabel = GOALS.find(g=>g.id===goal)?.title||"";
+  const totalCalToday = foodScans.filter(s=>new Date(s.created_at).toDateString()===new Date().toDateString()).reduce((a,s)=>a+(s.calories||0),0);
+  const totalProtToday = foodScans.filter(s=>new Date(s.created_at).toDateString()===new Date().toDateString()).reduce((a,s)=>a+(parseFloat(s.protein_g)||0),0);
 
-    {/* Add new entry */}
-    <div className="photo-card" style={{marginBottom:16}}>
-      <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,marginBottom:10}}>Log This Week</div>
-      <div className="photo-placeholder">
-        <span style={{fontSize:28}}>📷</span>
-        <span style={{fontSize:12,color:"var(--muted)"}}>Photo upload coming soon</span>
-        <span style={{fontSize:11,color:"var(--muted)",opacity:.7}}>For now, log your measurements below</span>
-      </div>
-      <div className="frow" style={{marginBottom:10}}>
-        <div className="field">
-          <label className="field-label">Current Weight</label>
-          <input className="finput" placeholder={profile.weight||"e.g. 178 lbs"} value={photoWeight} onChange={e=>setPhotoWeight(e.target.value)}/>
-        </div>
-        <div className="field">
-          <label className="field-label">Notes</label>
-          <input className="finput" placeholder="How are you feeling?" value={photoNote} onChange={e=>setPhotoNote(e.target.value)}/>
+  return(<>
+    <div className="page-heading" style={{marginBottom:4}}>📸 <em>Food Scanner</em></div>
+    <p className="page-sub" style={{marginBottom:12}}>Take a photo of your meal and AI will instantly calculate calories, macros, and whether it matches your plan.</p>
+
+    {/* Today's summary */}
+    {foodScans.some(s=>new Date(s.created_at).toDateString()===new Date().toDateString())&&(
+      <div className="daily-totals" style={{marginBottom:14}}>
+        <div style={{fontFamily:"var(--syne)",fontSize:12,fontWeight:700,color:"var(--green)",marginBottom:8}}>TODAY'S TOTAL</div>
+        <div className="macro-grid">
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff9500"}}>{totalCalToday}</div><div className="macro-cell-label">Calories</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff6b6b"}}>{totalProtToday.toFixed(0)}g</div><div className="macro-cell-label">Protein</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ffd700"}}>{foodScans.filter(s=>new Date(s.created_at).toDateString()===new Date().toDateString()).reduce((a,s)=>a+(parseFloat(s.carbs_g)||0),0).toFixed(0)}g</div><div className="macro-cell-label">Carbs</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#4ecdc4"}}>{foodScans.filter(s=>new Date(s.created_at).toDateString()===new Date().toDateString()).reduce((a,s)=>a+(parseFloat(s.fat_g)||0),0).toFixed(0)}g</div><div className="macro-cell-label">Fat</div></div>
         </div>
       </div>
-      {photoSaved&&<div className="msg-ok" style={{marginBottom:8}}>Progress logged! 📸</div>}
-      <button className="btn-p" onClick={saveProgressPhoto} disabled={savingPhoto}>
-        {savingPhoto?<><span className="spin"/> Saving…</>:"Log Progress Entry"}
+    )}
+
+    {/* Upload area */}
+    <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:14,padding:16,marginBottom:14}}>
+      <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,marginBottom:10,color:"#f0f4f8"}}>📷 Scan Your Meal</div>
+      <label style={{display:"block",background:"var(--bg3)",border:"2px dashed rgba(0,229,160,0.3)",borderRadius:12,padding:"24px 16px",textAlign:"center",cursor:"pointer",marginBottom:10,transition:"all .2s"}}>
+        <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleImageSelect}/>
+        {scanImage?(
+          <div>
+            <div style={{fontSize:32,marginBottom:6}}>✅</div>
+            <div style={{fontSize:13,color:"var(--green)",fontWeight:600}}>{scanImage.name}</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>Tap to change photo</div>
+          </div>
+        ):(
+          <div>
+            <div style={{fontSize:36,marginBottom:8}}>🍽️</div>
+            <div style={{fontSize:13,color:"var(--muted2)",fontWeight:600}}>Tap to take or upload a food photo</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Works best with clear, well-lit photos</div>
+          </div>
+        )}
+      </label>
+      {scanError&&<div className="msg-err" style={{marginBottom:10}}>{scanError}</div>}
+      <button className="btn-p" onClick={scanFood} disabled={!scanImage||scanning}>
+        {scanning?<><span className="spin"/> Analyzing your meal…</>:"🔍 Scan Food & Get Macros"}
       </button>
     </div>
 
-    {/* Progress history */}
-    {progressPhotos.length===0?(
-      <div style={{textAlign:"center",padding:"30px 20px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:12}}>
-        <div style={{fontSize:32,marginBottom:8}}>📸</div>
-        <div style={{fontFamily:"var(--syne)",fontSize:14,fontWeight:700,marginBottom:6}}>No entries yet</div>
-        <div style={{fontSize:13,color:"var(--muted2)"}}>Log your first entry above to start tracking your transformation!</div>
-      </div>
-    ):(
-      <>
-        <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,marginBottom:10,color:"var(--muted)"}}>
-          {progressPhotos.length} ENTRIES
+    {/* Scan result */}
+    {scanResult&&(
+      <div className="scan-result-card" style={{marginBottom:14,animation:"fadeUp .3s ease"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{fontFamily:"var(--syne)",fontSize:15,fontWeight:800,color:"#f0f4f8"}}>Scan Results</div>
+          <span className={["on-plan-badge",scanResult.on_plan?"yes":"no"].join(" ")}>
+            {scanResult.on_plan?"✓ On Plan":"⚠ Off Plan"}
+          </span>
         </div>
-        {progressPhotos.map((p,i)=>(
-          <div key={i} className="photo-card">
+
+        {/* Foods identified */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--muted)",fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Foods Identified</div>
+          <div>{(scanResult.foods||[]).map((f,i)=><span key={i} className="scan-food-item">{f}</span>)}</div>
+        </div>
+
+        {/* Macro grid */}
+        <div className="macro-grid" style={{marginBottom:12}}>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff9500"}}>{scanResult.total_calories}</div><div className="macro-cell-label">Calories</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff6b6b"}}>{scanResult.protein_g}g</div><div className="macro-cell-label">Protein</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ffd700"}}>{scanResult.carbs_g}g</div><div className="macro-cell-label">Carbs</div></div>
+          <div className="macro-cell"><div className="macro-cell-val" style={{color:"#4ecdc4"}}>{scanResult.fat_g}g</div><div className="macro-cell-label">Fat</div></div>
+        </div>
+
+        {/* Macro bars */}
+        {[["Protein",scanResult.protein_g,150,"#ff6b6b"],["Carbs",scanResult.carbs_g,250,"#ffd700"],["Fat",scanResult.fat_g,65,"#4ecdc4"],["Fiber",scanResult.fiber_g,30,"#50c878"]].map(([name,val,max,color])=>(
+          <div key={name} className="macro-bar-wrap">
+            <div className="macro-label"><span>{name}</span><span style={{color}}>{val}g</span></div>
+            <div className="macro-bar"><div className="macro-fill" style={{width:Math.min(100,(val/max)*100)+"%",background:color}}/></div>
+          </div>
+        ))}
+
+        {/* Vitamins */}
+        {scanResult.vitamins&&(
+          <div style={{marginTop:10,padding:"8px 10px",background:"var(--bg3)",borderRadius:8}}>
+            <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>Key Vitamins & Minerals</div>
+            <div style={{fontSize:12,color:"#9aabb8"}}>{scanResult.vitamins}</div>
+          </div>
+        )}
+
+        {/* Advice */}
+        {scanResult.advice&&(
+          <div style={{marginTop:10,padding:"9px 11px",background:"rgba(0,229,160,0.07)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:9}}>
+            <div style={{fontSize:12,color:"var(--muted2)"}}><strong style={{color:"var(--green)"}}>Coach tip:</strong> {scanResult.advice}</div>
+          </div>
+        )}
+
+        {/* Points awarded */}
+        <div style={{marginTop:10,textAlign:"center",fontSize:13,color:"var(--green)",fontWeight:700}}>
+          +{Math.min(scanResult.points||10,25)} points awarded! 🎯
+        </div>
+      </div>
+    )}
+
+    {/* Scan history */}
+    {foodScans.length>0&&(
+      <>
+        <div style={{fontFamily:"var(--syne)",fontSize:12,fontWeight:700,color:"var(--muted)",marginBottom:10,letterSpacing:".06em"}}>SCAN HISTORY</div>
+        {foodScans.slice(0,10).map((s,i)=>(
+          <div key={i} className="scan-history-item">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-              <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,color:"#f0f4f8"}}>
-                Week {progressPhotos.length-i}
-              </div>
-              <div style={{fontSize:11,color:"var(--muted)"}}>{new Date(p.created_at).toLocaleDateString()}</div>
+              <div style={{fontFamily:"var(--syne)",fontSize:12,fontWeight:700,color:"#f0f4f8"}}>{s.food_description?.slice(0,40)||"Food scan"}</div>
+              <span className={["on-plan-badge",s.on_plan?"yes":"no"].join(" ")} style={{fontSize:10}}>{s.on_plan?"✓":"⚠"}</span>
             </div>
-            {p.weight_at_time&&(
-              <div style={{fontSize:13,color:"var(--green)",fontWeight:600,marginBottom:4}}>⚖️ {p.weight_at_time}</div>
-            )}
-            {p.note&&<div style={{fontSize:13,color:"#9aabb8",lineHeight:1.6}}>{p.note}</div>}
-            {i<progressPhotos.length-1&&(()=>{
-              const prev = progressPhotos[i+1];
-              if(prev?.weight_at_time&&p.weight_at_time){
-                const curr = parseFloat(p.weight_at_time);
-                const prevW = parseFloat(prev.weight_at_time);
-                const diff = (curr-prevW).toFixed(1);
-                if(!isNaN(diff)&&diff!=="0.0"){
-                  return <div style={{fontSize:12,color:parseFloat(diff)<0?"var(--green)":"var(--red)",marginTop:4}}>
-                    {parseFloat(diff)<0?"▼":"▲"} {Math.abs(diff)} lbs from last week
-                  </div>;
-                }
-              }
-            })()}
+            <div className="macro-grid" style={{padding:8}}>
+              <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff9500",fontSize:12}}>{s.calories}</div><div className="macro-cell-label">Cal</div></div>
+              <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ff6b6b",fontSize:12}}>{parseFloat(s.protein_g||0).toFixed(0)}g</div><div className="macro-cell-label">Prot</div></div>
+              <div className="macro-cell"><div className="macro-cell-val" style={{color:"#ffd700",fontSize:12}}>{parseFloat(s.carbs_g||0).toFixed(0)}g</div><div className="macro-cell-label">Carbs</div></div>
+              <div className="macro-cell"><div className="macro-cell-val" style={{color:"#4ecdc4",fontSize:12}}>{parseFloat(s.fat_g||0).toFixed(0)}g</div><div className="macro-cell-label">Fat</div></div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--muted)",marginTop:4}}>
+              <span>+{s.points_awarded||0} pts</span>
+              <span>{new Date(s.created_at).toLocaleDateString()}</span>
+            </div>
           </div>
         ))}
       </>
@@ -2325,11 +2429,13 @@ const [translating, setTranslating] = useState(false);
   const [newMsg,setNewMsg]=useState("");
   const [sendingMsg,setSendingMsg]=useState(false);
   const [unreadCount,setUnreadCount]=useState(0);
-  const [progressPhotos,setProgressPhotos]=useState([]);
-  const [photoNote,setPhotoNote]=useState("");
-  const [photoWeight,setPhotoWeight]=useState("");
-  const [savingPhoto,setSavingPhoto]=useState(false);
-  const [photoSaved,setPhotoSaved]=useState(false);
+  const [foodScans,setFoodScans]=useState([]);
+  const [scanImage,setScanImage]=useState(null);
+  const [scanImageBase64,setScanImageBase64]=useState("");
+  const [scanning,setScanning]=useState(false);
+  const [scanResult,setScanResult]=useState(null);
+  const [scanError,setScanError]=useState("");
+  const [coachMemory,setCoachMemory]=useState("");
   const MAX_FOLLOWS = plan==="pro" ? 200 : 100;
   const [loadingLeaderboard,setLoadingLeaderboard]=useState(false);
   const [showExpiredModal,setShowExpiredModal]=useState(false);
@@ -2355,7 +2461,7 @@ const [translating, setTranslating] = useState(false);
       dbGetMessages(email).then(msgs=>setAllMessages(msgs));
     }
     if(dashTab==="photos" && email){
-      dbGetProgressPhotos(email).then(photos=>setProgressPhotos(photos));
+      dbGetFoodScans(email).then(scans=>setFoodScans(scans));
     }
     if(dashTab==="progress"){
       setLoadingProgress(true);
@@ -2704,9 +2810,10 @@ const [translating, setTranslating] = useState(false);
       );
       setWorkoutPlan(workout);
       setProgress(55);
+      const caloricGoal = goal==="weight_loss" ? "caloric deficit 300-500 cal below maintenance" : goal==="muscle_gain" ? "caloric surplus 300-500 cal above maintenance" : "maintenance calories";
       const meal=await askClaude(
-        "Create a "+daysCount+"-day meal plan for: "+ctx+". Write Day 1 through Day "+daysCount+". For each day list Breakfast, Lunch, Dinner, and Snack. Use "+unitSystem+" measurements. Respond in the same language as: "+langCode,
-        "You are a nutritionist. Write meal plans in plain text. No markdown. Label each day."
+        "Create a "+daysCount+"-day meal plan for: "+ctx+". Caloric target: "+caloricGoal+". Diet: "+profile.diet+" strictly. Write Day 1 through Day "+daysCount+". For EACH meal (Breakfast, Lunch, Dinner, Snack) show food with portions, then on next line show: [Cal: X | P: Xg | C: Xg | F: Xg]. At end of each day add: [DAILY: Cal: X | P: Xg | C: Xg | F: Xg | Fiber: Xg]. Use "+unitSystem+". Language: "+langCode,
+        "You are a certified nutritionist. Include accurate macros per meal and daily totals. Strictly follow: "+profile.diet+". Plain text only. Use exact macro format [Cal: X | P: Xg | C: Xg | F: Xg]."
       );
       setMealPlan(meal);
       setProgress(78);
@@ -2795,18 +2902,124 @@ const [translating, setTranslating] = useState(false);
     return Array.from(partners);
   };
 
-  const saveProgressPhoto = async()=>{
-    if(savingPhoto) return;
-    setSavingPhoto(true);
-    await dbSaveProgressPhoto({email, note:photoNote, weightAtTime:photoWeight||profile.weight});
-    const photos = await dbGetProgressPhotos(email);
-    setProgressPhotos(photos);
-    setPhotoNote("");
-    setPhotoWeight("");
-    setPhotoSaved(true);
-    setTimeout(()=>setPhotoSaved(false),3000);
-    setSavingPhoto(false);
+  const handleImageSelect = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    setScanImage(file);
+    setScanResult(null);
+    setScanError("");
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      const base64 = ev.target.result.split(",")[1];
+      setScanImageBase64(base64);
+    };
+    reader.readAsDataURL(file);
   };
+
+  const uploadFoodPhoto = async(file)=>{
+    try {
+      const client = await getSupabase();
+      const fileName = email.replace("@","_")+"/"+Date.now()+".jpg";
+      const {data, error} = await client.storage.from("progress-photos").upload(fileName, file, {contentType: file.type||"image/jpeg"});
+      if(error) console.error("Upload error:", error);
+      return data?.path || null;
+    } catch(e){ console.error("Upload failed:", e); return null; }
+  };
+
+  const scanFood = async()=>{
+    if(!scanImageBase64 || scanning) return;
+    setScanning(true);
+    setScanError("");
+    const goalLabel = t.goals.find(g=>g.id===goal)?.title||"";
+    try {
+      const res = await fetch("/api/chat", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          messages:[{
+            role:"user",
+            content:[
+              {type:"image", source:{type:"base64", media_type:scanImage.type||"image/jpeg", data:scanImageBase64}},
+              {type:"text", text:"Analyze this food photo. Return ONLY a JSON object with these exact fields: {"foods": [list of foods identified], "total_calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number, "vitamins": "brief list of key vitamins", "on_plan": true or false based on whether this matches a "+profile.diet+" diet for "+goalLabel+", "advice": "1 sentence of nutritional advice", "points": number between 5-25 based on how healthy and on-plan this meal is"}. Be accurate with portions visible in the image."}
+            ]
+          }],
+          system:"You are a professional nutritionist and dietitian. Analyze food photos and return accurate nutritional information as JSON only. No markdown, no explanation, just the JSON object."
+        })
+      });
+      const data = await res.json();
+      if(data.error) throw new Error(data.error.message);
+      const text = (data.content||[]).map(b=>b.text||"").join("");
+      const cleaned = text.replace(/^```json?/,"").replace(/```$/,"").trim();
+      const parsed = JSON.parse(cleaned);
+      setScanResult(parsed);
+
+      // Award points and save scan
+      const pts = Math.min(parsed.points||10, 25);
+      // Upload photo to storage
+      const photoPath = await uploadFoodPhoto(scanImage);
+
+      await dbSaveFoodScan({
+        email,
+        foodDescription: parsed.foods?.join(", ")||"Unknown food",
+        calories: parsed.total_calories||0,
+        proteinG: parsed.protein_g||0,
+        carbsG: parsed.carbs_g||0,
+        fatG: parsed.fat_g||0,
+        vitamins: parsed.vitamins||"",
+        scanResult: JSON.stringify(parsed),
+        pointsAwarded: pts,
+        onPlan: parsed.on_plan||false,
+        photoPath
+      });
+
+      // Award points
+      const today = new Date().toISOString().split("T")[0];
+      const dpToday = dailyPointsDate === today ? dailyPointsToday : 0;
+      const remaining = Math.max(0, DAILY_POINT_CAP - dpToday);
+      const earned = Math.min(pts, remaining);
+      if(earned > 0){
+        const newPoints = userPoints + earned;
+        const newRank = getRank(newPoints);
+        setUserPoints(newPoints);
+        setUserRank(newRank);
+        setDailyPointsToday(dpToday + earned);
+        setDailyPointsDate(today);
+        await dbUpdatePoints({email, points:newPoints, rank:newRank.name, streak:userStreak, last_log_date:lastLogDate, daily_points_today:dpToday+earned, daily_points_date:today});
+      }
+
+      // Refresh scans list
+      const scans = await dbGetFoodScans(email);
+      setFoodScans(scans);
+
+    } catch(e){
+      setScanError("Could not analyze image: "+e.message+". Please try a clearer photo.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // Save coach memory at end of session
+  const saveCoachMemory = async(chatHistory)=>{
+    if(!email || chatHistory.length < 4) return;
+    try {
+      const goalLabel = t.goals.find(g=>g.id===goal)?.title||"";
+      const summary = await askClaude(
+        "Summarize this coaching session in under 150 words. Focus on: what the user logged, any injuries or issues mentioned, progress made, advice given. User context: "+profile.name+", "+goalLabel+", "+profile.level+". Session: "+chatHistory.slice(-10).map(m=>m.role+": "+m.text).join(" | "),
+        "You are a fitness coach summarizing a session. Be concise and factual. Write in third person."
+      );
+      const newMemory = "["+new Date().toLocaleDateString()+"] "+summary;
+      const fullMemory = (coachMemory ? coachMemory+"
+
+"+newMemory : newMemory).slice(-2000);
+      setCoachMemory(fullMemory);
+      await dbSaveCoachMemory(email, fullMemory);
+    } catch(e){ console.error("Memory save error:", e); }
+  };
+
+  // Save session summary when leaving chat tab
+  useEffect(()=>{
+    return ()=>{ if(dashTab==="chat" && msgs.length>3) summarizeSession(); };
+  },[dashTab]);
 
   const sendChat=async(text)=>{
     if(!text.trim()||chatBusy) return;
@@ -2816,12 +3029,17 @@ const [translating, setTranslating] = useState(false);
     const goalLabel=t.goals.find(g=>g.id===goal)?.title||"";
     const history=msgs.map(m=>({role:m.role==="bot"?"assistant":"user",content:m.text}));
     history.push({role:"user",content:text});
+    // Save memory every 10 messages
+    if(msgs.length > 0 && msgs.length % 10 === 0){
+      saveCoachMemory(msgs);
+    }
 
     // detect progress logging keywords
     const progressKeywords=["sets","reps","lbs","kg","km","miles","minutes","completed","finished","did","ran","lifted","bench","squat","deadlift","log","logged","weigh","weight today","pb","pr","personal record","personal best"];
     const isProgressLog = progressKeywords.some(k=>text.toLowerCase().includes(k));
 
-    const sys="You are an expert AI personal trainer and nutritionist named Coach. You know this user: Name: "+profile.name+", Age: "+profile.age+", Weight: "+profile.weight+", Goal: "+goalLabel+", Level: "+profile.level+", Diet: "+profile.diet+", Country: "+country+". Their workout plan: "+workoutPlan.slice(0,300)+"... Be encouraging and specific. Under 150 words. Respond in language: "+langCode+(isProgressLog?". The user is logging progress — acknowledge it enthusiastically, confirm what they logged, and give a motivating follow-up tip.":"");
+    const memoryContext = coachMemory ? "\n\nPrevious session notes: "+coachMemory.slice(-500) : "";
+    const sys="You are an expert AI personal trainer and nutritionist named Coach. You know this user intimately: Name: "+profile.name+", Age: "+profile.age+", Weight: "+profile.weight+", Goal: "+goalLabel+", Level: "+profile.level+", Diet: "+profile.diet+", Country: "+country+", Rank: "+userRank.name+", Streak: "+userStreak+" days. Their current workout plan: "+workoutPlan.slice(0,300)+"..."+memoryContext+" Be encouraging, specific and personal. Use their name occasionally. Under 150 words per reply. Respond in language: "+langCode+(isProgressLog?". The user is logging progress — acknowledge enthusiastically, confirm what they logged, give a motivating tip.":"");
 
     try{
       const reply=await askClaudeChat(history,sys);
@@ -2939,7 +3157,7 @@ const [translating, setTranslating] = useState(false);
           </div>
         </header>
         <nav className="dnav">
-          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["leaderboard","🏆 Ranks"],["social",unreadCount>0?"👥 Social ●":"👥 Social"],["photos","📸 Photos"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
+          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["leaderboard","🏆 Ranks"],["social",unreadCount>0?"👥 Social ●":"👥 Social"],["photos","📸 Food Scan"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
             <button key={id} className={["dtab",dashTab===id.trim()?"active":""].filter(Boolean).join(" ")} onClick={()=>setDashTab(id.trim())}>{lbl}</button>
           ))}
         </nav>
@@ -3009,7 +3227,23 @@ const [translating, setTranslating] = useState(false);
                   <button key={id} className={["rtab",resultTab===id.trim()?"active":""].filter(Boolean).join(" ")} onClick={()=>setResultTab(id.trim())}>{lbl}</button>
                 ))}
               </div>
-              <div className="rbody">{resultTab==="workout"?workoutPlan:mealPlan}</div>
+              <div className="rbody" style={{whiteSpace:"pre-wrap"}}>
+                {resultTab==="workout"?workoutPlan:(
+                  mealPlan.split('
+').map((line,i)=>{
+                    if(line.startsWith('[Cal:') || line.startsWith('[DAILY:')){
+                      return <div key={i} style={{background:"rgba(0,229,160,0.08)",border:"1px solid rgba(0,229,160,0.15)",borderRadius:6,padding:"4px 8px",margin:"4px 0",fontSize:11,color:"var(--green)",fontFamily:"var(--syne)",fontWeight:600}}>{line}</div>;
+                    }
+                    if(line.startsWith('Day ')){
+                      return <div key={i} style={{fontWeight:700,color:"#f0f4f8",marginTop:14,marginBottom:2,fontSize:14}}>{line}</div>;
+                    }
+                    if(line.match(/^(Breakfast|Lunch|Dinner|Snack):/)){
+                      return <div key={i} style={{color:"var(--green)",fontWeight:600,marginTop:8,fontSize:12}}>{line}</div>;
+                    }
+                    return <div key={i} style={{color:"#9aabb8",fontSize:12,lineHeight:1.7}}>{line}</div>;
+                  })
+                )}
+              </div>
               {plan==="pro"?(
                 <button className="regen-btn" disabled={regenerating} onClick={()=>generate(true)}>
                   {regenerating?<><span className="spin"/> {t.regenerating}</>:t.regenerate}
@@ -3248,17 +3482,22 @@ const [translating, setTranslating] = useState(false);
               userRank={userRank}
             />}
 
-            {dashTab==="photos"&&<PhotosTab
+            {dashTab==="photos"&&<FoodScanTab
               email={email}
               profile={profile}
-              progressPhotos={progressPhotos}
-              photoNote={photoNote}
-              setPhotoNote={setPhotoNote}
-              photoWeight={photoWeight}
-              setPhotoWeight={setPhotoWeight}
-              savingPhoto={savingPhoto}
-              photoSaved={photoSaved}
-              saveProgressPhoto={saveProgressPhoto}
+              plan={plan}
+              goal={goal}
+              foodScans={foodScans}
+              scanImage={scanImage}
+              scanImageBase64={scanImageBase64}
+              scanning={scanning}
+              scanResult={scanResult}
+              scanError={scanError}
+              handleImageSelect={handleImageSelect}
+              scanFood={scanFood}
+              userPoints={userPoints}
+              t={t}
+              GOALS={t.goals}
             />}
 
             {dashTab==="reviews"&&<>
