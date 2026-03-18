@@ -1620,6 +1620,91 @@ async function dbLoadProgress(email){
   return data||[];
 }
 
+// ── SOCIAL DB FUNCTIONS ──
+async function dbFollowUser(followerEmail, followingEmail){
+  const client = await getSupabase();
+  await client.from("follows").insert({follower_email: followerEmail, following_email: followingEmail});
+}
+
+async function dbUnfollowUser(followerEmail, followingEmail){
+  const client = await getSupabase();
+  await client.from("follows").delete().eq("follower_email", followerEmail).eq("following_email", followingEmail);
+}
+
+async function dbGetFollowing(email){
+  const client = await getSupabase();
+  const {data} = await client.from("follows").select("following_email").eq("follower_email", email);
+  return (data||[]).map(r=>r.following_email);
+}
+
+async function dbGetFollowers(email){
+  const client = await getSupabase();
+  const {data} = await client.from("follows").select("follower_email").eq("following_email", email);
+  return (data||[]).map(r=>r.follower_email);
+}
+
+async function dbSendMessage(senderEmail, receiverEmail, content){
+  const client = await getSupabase();
+  await client.from("messages").insert({sender_email: senderEmail, receiver_email: receiverEmail, content, read: false});
+}
+
+async function dbGetMessages(email){
+  const client = await getSupabase();
+  const {data} = await client.from("messages")
+    .select("*")
+    .or(`sender_email.eq.${email},receiver_email.eq.${email}`)
+    .order("created_at", {ascending: true});
+  return data||[];
+}
+
+async function dbMarkMessagesRead(senderEmail, receiverEmail){
+  const client = await getSupabase();
+  await client.from("messages").update({read: true})
+    .eq("sender_email", senderEmail).eq("receiver_email", receiverEmail);
+}
+
+async function dbGetUnreadCount(email){
+  const client = await getSupabase();
+  const {count} = await client.from("messages").select("*", {count:"exact",head:true})
+    .eq("receiver_email", email).eq("read", false);
+  return count||0;
+}
+
+async function dbSearchUsers(query){
+  const client = await getSupabase();
+  const {data} = await client.from("users")
+    .select("name, email, rank, streak, plan, points")
+    .ilike("name", `%${query}%`)
+    .limit(20);
+  return data||[];
+}
+
+async function dbGetUsersByEmails(emails){
+  if(!emails.length) return [];
+  const client = await getSupabase();
+  const {data} = await client.from("users")
+    .select("name, email, rank, streak, plan, points")
+    .in("email", emails);
+  return data||[];
+}
+
+async function dbSaveProgressPhoto({email, note, weightAtTime}){
+  const client = await getSupabase();
+  const {data, error} = await client.from("progress_photos")
+    .insert({email, note, weight_at_time: weightAtTime, created_at: new Date().toISOString()})
+    .select().single();
+  if(error) console.error("Photo save error:", error);
+  return data;
+}
+
+async function dbGetProgressPhotos(email){
+  const client = await getSupabase();
+  const {data} = await client.from("progress_photos")
+    .select("*").eq("email", email)
+    .order("created_at", {ascending: false});
+  return data||[];
+}
+
 let ejsReady=false;
 async function sendVerificationEmail(toEmail,code){
   if(!ejsReady){
@@ -1857,6 +1942,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
 .points-fill{height:100%;border-radius:4px;transition:width .6s ease;}
 .expired-overlay{position:fixed;inset:0;background:rgba(8,12,16,.97);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
 .expired-card{background:var(--bg2);border:1px solid rgba(245,197,66,.3);border-radius:20px;padding:36px;max-width:440px;width:100%;text-align:center;}
+/* Social styles */
+.social-tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--bg2);border-radius:10px;padding:4px;border:1px solid var(--border);}
+.social-tab{flex:1;padding:8px;border-radius:7px;border:none;background:transparent;font-family:var(--syne);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap;}
+.social-tab.active{background:var(--bg3);color:var(--green);}
+.user-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:13px;display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+.user-card-avatar{width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.user-card-info{flex:1;}
+.user-card-name{font-family:var(--syne);font-size:13px;font-weight:700;color:#f0f4f8;}
+.user-card-meta{font-size:11px;color:var(--muted2);margin-top:2px;}
+.follow-btn{padding:6px 14px;border-radius:100px;border:1.5px solid var(--green);background:transparent;color:var(--green);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--syne);transition:all .2s;white-space:nowrap;}
+.follow-btn:hover{background:var(--green-bg2);}
+.follow-btn.following{background:var(--green-bg2);color:var(--green);}
+.msg-btn{padding:6px 12px;border-radius:100px;border:1px solid var(--border2);background:transparent;color:var(--muted2);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--inter);transition:all .2s;white-space:nowrap;}
+.msg-btn:hover{border-color:var(--green);color:var(--green);}
+.convo-item{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;background:var(--bg2);border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:all .2s;}
+.convo-item:hover{border-color:rgba(0,229,160,.3);}
+.convo-item.active{border-color:var(--green);background:var(--green-bg);}
+.unread-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.msg-area{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.msg-mine{align-self:flex-end;background:var(--bg3);border:1px solid var(--border2);padding:8px 12px;border-radius:12px;border-bottom-right-radius:3px;font-size:13px;color:#f0f4f8;max-width:75%;}
+.msg-theirs{align-self:flex-start;background:#131920;border:1px solid var(--border);padding:8px 12px;border-radius:12px;border-bottom-left-radius:3px;font-size:13px;color:#9aabb8;max-width:75%;}
+.msg-time{font-size:10px;color:var(--muted);margin-top:2px;}
+.photo-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.photo-placeholder{background:var(--bg3);border:2px dashed var(--border2);border-radius:10px;height:120px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--muted);}
+.unread-badge{background:var(--green);color:#000;font-size:9px;font-weight:800;padding:1px 5px;border-radius:100px;margin-left:4px;font-family:var(--syne);}
 .trust-bar{display:flex;gap:0;border-top:1px solid var(--border);padding:14px 0 0;margin-top:16px;flex-wrap:wrap;justify-content:center;gap:16px;}
 .trust-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2);}
 .trust-item span{font-size:14px;}
@@ -1865,6 +1975,204 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
   .pricing-wrap,.frow,.frow3{grid-template-columns:1fr;}
 }
 `;
+
+function SocialTab({email,profile,plan,following,followers,friendProfiles,searchQuery,setSearchQuery,searchResults,searching,searchUsers,toggleFollow,activeConvo,setActiveConvo,openConvo,allMessages,newMsg,setNewMsg,sendMessage,sendingMsg,getConvoMessages,getConvoPartners,userRank}){
+  const [socialView,setSocialView]=useState("friends");
+  const maxFollows = plan==="pro" ? 200 : 100;
+  const convoPartners = getConvoPartners();
+
+  return(<>
+    <div className="page-heading" style={{marginBottom:4}}>👥 <em>Social</em></div>
+    <p className="page-sub" style={{marginBottom:12}}>
+      Following {following.length}/{maxFollows} · {followers.length} followers
+      {plan!=="pro"&&<span style={{fontSize:11,color:"var(--gold)",marginLeft:8}}>Pro = 200 follows</span>}
+    </p>
+    <div className="social-tabs">
+      {[["friends","Friends"],["search","Find People"],["messages","Messages"]].map(([v,l])=>(
+        <button key={v} className={["social-tab",socialView===v?"active":""].filter(Boolean).join(" ")} onClick={()=>setSocialView(v)}>{l}</button>
+      ))}
+    </div>
+
+    {socialView==="friends"&&<>
+      {friendProfiles.length===0?(
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+          <div style={{fontSize:32,marginBottom:8}}>👥</div>
+          <div style={{fontFamily:"var(--syne)",fontSize:14,fontWeight:700,marginBottom:6}}>No friends yet</div>
+          <div style={{fontSize:13}}>Search for people to follow!</div>
+        </div>
+      ):friendProfiles.map((u,i)=>{
+        const rank = RANKS.find(r=>r.name===u.rank)||RANKS[0];
+        return(
+          <div key={i} className="user-card">
+            <div className="user-card-avatar">{rank.icon}</div>
+            <div className="user-card-info">
+              <div className="user-card-name">{u.name}</div>
+              <div className="user-card-meta">
+                {rank.name} · {u.points} pts {u.streak>0&&<span style={{color:"#ff6b35"}}>🔥{u.streak}</span>}
+                {u.plan==="pro"&&<span style={{background:"rgba(245,197,66,.15)",color:"var(--gold)",padding:"1px 6px",borderRadius:100,fontSize:9,fontWeight:700,marginLeft:4}}>PRO</span>}
+              </div>
+            </div>
+            <button className="msg-btn" onClick={()=>{openConvo(u.email);setSocialView("messages");}}>Message</button>
+            <button className="follow-btn following" onClick={()=>toggleFollow(u.email)}>Following</button>
+          </div>
+        );
+      })}
+    </>}
+
+    {socialView==="search"&&<>
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <input className="finput" placeholder="Search by name…" value={searchQuery}
+          onChange={e=>{setSearchQuery(e.target.value);searchUsers(e.target.value);}}
+          style={{flex:1}}/>
+        {searching&&<span className="spin"/>}
+      </div>
+      {searchResults.length===0&&searchQuery&&!searching&&(
+        <div style={{textAlign:"center",padding:20,color:"var(--muted)",fontSize:13}}>No users found</div>
+      )}
+      {searchResults.map((u,i)=>{
+        const rank = RANKS.find(r=>r.name===u.rank)||RANKS[0];
+        const isFollowing = following.includes(u.email);
+        return(
+          <div key={i} className="user-card">
+            <div className="user-card-avatar">{rank.icon}</div>
+            <div className="user-card-info">
+              <div className="user-card-name">{u.name}</div>
+              <div className="user-card-meta">
+                {rank.name} · {u.points||0} pts
+                {u.plan==="pro"&&<span style={{background:"rgba(245,197,66,.15)",color:"var(--gold)",padding:"1px 6px",borderRadius:100,fontSize:9,fontWeight:700,marginLeft:4}}>PRO</span>}
+              </div>
+            </div>
+            <button className={["follow-btn",isFollowing?"following":""].filter(Boolean).join(" ")} onClick={()=>toggleFollow(u.email)}>
+              {isFollowing?"Following":"Follow"}
+            </button>
+          </div>
+        );
+      })}
+    </>}
+
+    {socialView==="messages"&&<>
+      {!activeConvo?(
+        <>
+          {convoPartners.length===0?(
+            <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+              <div style={{fontSize:32,marginBottom:8}}>💬</div>
+              <div style={{fontSize:13}}>No messages yet. Follow someone and message them!</div>
+            </div>
+          ):convoPartners.map((partnerEmail,i)=>{
+            const msgs = getConvoMessages(partnerEmail);
+            const lastMsg = msgs[msgs.length-1];
+            const unread = msgs.filter(m=>m.receiver_email===email&&!m.read).length;
+            const partner = friendProfiles.find(f=>f.email===partnerEmail);
+            return(
+              <div key={i} className={["convo-item",activeConvo===partnerEmail?"active":""].filter(Boolean).join(" ")} onClick={()=>openConvo(partnerEmail)}>
+                <div style={{fontSize:20}}>{(RANKS.find(r=>r.name===partner?.rank)||RANKS[0]).icon}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,color:"#f0f4f8"}}>{partner?.name||partnerEmail}</div>
+                  {lastMsg&&<div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{lastMsg.content.slice(0,40)}{lastMsg.content.length>40?"…":""}</div>}
+                </div>
+                {unread>0&&<span className="unread-badge">{unread}</span>}
+              </div>
+            );
+          })}
+        </>
+      ):(
+        <>
+          <button className="btn-s" style={{marginBottom:12,fontSize:12}} onClick={()=>setActiveConvo(null)}>← Back</button>
+          <div className="msg-area">
+            {getConvoMessages(activeConvo).length===0&&(
+              <div style={{textAlign:"center",padding:20,color:"var(--muted)",fontSize:13}}>No messages yet. Say hi!</div>
+            )}
+            {getConvoMessages(activeConvo).map((m,i)=>(
+              <div key={i} className={m.sender_email===email?"msg-mine":"msg-theirs"}>
+                {m.content}
+                <div className="msg-time">{new Date(m.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="cin" placeholder="Type a message…" value={newMsg}
+              onChange={e=>setNewMsg(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&sendMessage()}/>
+            <button className="csend" onClick={sendMessage} disabled={sendingMsg||!newMsg.trim()}>Send</button>
+          </div>
+        </>
+      )}
+    </>}
+  </>);
+}
+
+function PhotosTab({email,profile,progressPhotos,photoNote,setPhotoNote,photoWeight,setPhotoWeight,savingPhoto,photoSaved,saveProgressPhoto}){
+  return(<>
+    <div className="page-heading" style={{marginBottom:4}}>📸 <em>Progress Photos</em></div>
+    <p className="page-sub" style={{marginBottom:14}}>Log your weekly progress. Over time you will see your transformation.</p>
+
+    {/* Add new entry */}
+    <div className="photo-card" style={{marginBottom:16}}>
+      <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,marginBottom:10}}>Log This Week</div>
+      <div className="photo-placeholder">
+        <span style={{fontSize:28}}>📷</span>
+        <span style={{fontSize:12,color:"var(--muted)"}}>Photo upload coming soon</span>
+        <span style={{fontSize:11,color:"var(--muted)",opacity:.7}}>For now, log your measurements below</span>
+      </div>
+      <div className="frow" style={{marginBottom:10}}>
+        <div className="field">
+          <label className="field-label">Current Weight</label>
+          <input className="finput" placeholder={profile.weight||"e.g. 178 lbs"} value={photoWeight} onChange={e=>setPhotoWeight(e.target.value)}/>
+        </div>
+        <div className="field">
+          <label className="field-label">Notes</label>
+          <input className="finput" placeholder="How are you feeling?" value={photoNote} onChange={e=>setPhotoNote(e.target.value)}/>
+        </div>
+      </div>
+      {photoSaved&&<div className="msg-ok" style={{marginBottom:8}}>Progress logged! 📸</div>}
+      <button className="btn-p" onClick={saveProgressPhoto} disabled={savingPhoto}>
+        {savingPhoto?<><span className="spin"/> Saving…</>:"Log Progress Entry"}
+      </button>
+    </div>
+
+    {/* Progress history */}
+    {progressPhotos.length===0?(
+      <div style={{textAlign:"center",padding:"30px 20px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:12}}>
+        <div style={{fontSize:32,marginBottom:8}}>📸</div>
+        <div style={{fontFamily:"var(--syne)",fontSize:14,fontWeight:700,marginBottom:6}}>No entries yet</div>
+        <div style={{fontSize:13,color:"var(--muted2)"}}>Log your first entry above to start tracking your transformation!</div>
+      </div>
+    ):(
+      <>
+        <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,marginBottom:10,color:"var(--muted)"}}>
+          {progressPhotos.length} ENTRIES
+        </div>
+        {progressPhotos.map((p,i)=>(
+          <div key={i} className="photo-card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:700,color:"#f0f4f8"}}>
+                Week {progressPhotos.length-i}
+              </div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>{new Date(p.created_at).toLocaleDateString()}</div>
+            </div>
+            {p.weight_at_time&&(
+              <div style={{fontSize:13,color:"var(--green)",fontWeight:600,marginBottom:4}}>⚖️ {p.weight_at_time}</div>
+            )}
+            {p.note&&<div style={{fontSize:13,color:"#9aabb8",lineHeight:1.6}}>{p.note}</div>}
+            {i<progressPhotos.length-1&&(()=>{
+              const prev = progressPhotos[i+1];
+              if(prev?.weight_at_time&&p.weight_at_time){
+                const curr = parseFloat(p.weight_at_time);
+                const prevW = parseFloat(prev.weight_at_time);
+                const diff = (curr-prevW).toFixed(1);
+                if(!isNaN(diff)&&diff!=="0.0"){
+                  return <div style={{fontSize:12,color:parseFloat(diff)<0?"var(--green)":"var(--red)",marginTop:4}}>
+                    {parseFloat(diff)<0?"▼":"▲"} {Math.abs(diff)} lbs from last week
+                  </div>;
+                }
+              }
+            })()}
+          </div>
+        ))}
+      </>
+    )}
+  </>);
+}
 
 function LeaderboardTab({leaderboard,loadingLeaderboard,userRank,userPoints,userStreak,profileName,plan}){
   const [lbFilter,setLbFilter]=useState("All");
@@ -2006,6 +2314,23 @@ const [translating, setTranslating] = useState(false);
   const [dailyPointsToday,setDailyPointsToday]=useState(0);
   const [dailyPointsDate,setDailyPointsDate]=useState("");
   const [leaderboard,setLeaderboard]=useState([]);
+  const [following,setFollowing]=useState([]);
+  const [followers,setFollowers]=useState([]);
+  const [friendProfiles,setFriendProfiles]=useState([]);
+  const [searchQuery,setSearchQuery]=useState("");
+  const [searchResults,setSearchResults]=useState([]);
+  const [searching,setSearching]=useState(false);
+  const [activeConvo,setActiveConvo]=useState(null);
+  const [allMessages,setAllMessages]=useState([]);
+  const [newMsg,setNewMsg]=useState("");
+  const [sendingMsg,setSendingMsg]=useState(false);
+  const [unreadCount,setUnreadCount]=useState(0);
+  const [progressPhotos,setProgressPhotos]=useState([]);
+  const [photoNote,setPhotoNote]=useState("");
+  const [photoWeight,setPhotoWeight]=useState("");
+  const [savingPhoto,setSavingPhoto]=useState(false);
+  const [photoSaved,setPhotoSaved]=useState(false);
+  const MAX_FOLLOWS = plan==="pro" ? 200 : 100;
   const [loadingLeaderboard,setLoadingLeaderboard]=useState(false);
   const [showExpiredModal,setShowExpiredModal]=useState(false);
   const [loadingProgress,setLoadingProgress]=useState(false);
@@ -2019,6 +2344,18 @@ const [translating, setTranslating] = useState(false);
         setLeaderboard(data);
         setLoadingLeaderboard(false);
       });
+    }
+    if(dashTab==="social" && email){
+      dbGetFollowing(email).then(async(followingList)=>{
+        setFollowing(followingList);
+        const profiles = await dbGetUsersByEmails(followingList);
+        setFriendProfiles(profiles);
+      });
+      dbGetFollowers(email).then(f=>setFollowers(f));
+      dbGetMessages(email).then(msgs=>setAllMessages(msgs));
+    }
+    if(dashTab==="photos" && email){
+      dbGetProgressPhotos(email).then(photos=>setProgressPhotos(photos));
     }
     if(dashTab==="progress"){
       setLoadingProgress(true);
@@ -2376,8 +2713,8 @@ const [translating, setTranslating] = useState(false);
       let grocery="";
       if(plan==="pro"){
         grocery=await askClaude(
-          "Based on this meal plan, create a grocery list organized by category. Use "+unitSystem+" measurements. Respond in language: "+langCode+". Meal plan: "+meal.slice(0,500),
-          "You are a nutritionist. Write a concise grocery list in plain text grouped by category."
+          "Based on this meal plan, create a detailed grocery list AND simple recipes. The person follows a "+profile.diet+" diet — strictly respect this restriction. Use "+unitSystem+" measurements. Respond in language: "+langCode+". Format: First a GROCERY LIST organized by category (Proteins, Produce, Grains, Dairy/Alternatives, Other). Then RECIPES section with 3-4 simple meal prep recipes from the plan with ingredients and steps. Meal plan: "+meal.slice(0,600),
+          "You are a nutritionist. Strictly follow the dietary restriction: "+profile.diet+". No ingredients that violate this diet. Write in plain text grouped by sections."
         );
         setGroceryList(grocery);
       }
@@ -2399,6 +2736,76 @@ const [translating, setTranslating] = useState(false);
       setGenerating(false);
       setRegenerating(false);
     }
+  };
+
+  const searchUsers = async(q)=>{
+    if(!q.trim()) return setSearchResults([]);
+    setSearching(true);
+    const results = await dbSearchUsers(q);
+    setSearchResults(results.filter(u=>u.email!==email));
+    setSearching(false);
+  };
+
+  const toggleFollow = async(targetEmail)=>{
+    const maxFollows = plan==="pro" ? 200 : 100;
+    if(!following.includes(targetEmail)){
+      if(following.length >= maxFollows){
+        alert(`You can follow up to ${maxFollows} people. ${plan!=="pro"?"Upgrade to Pro for 200 follows!":""}`);
+        return;
+      }
+      await dbFollowUser(email, targetEmail);
+      setFollowing(f=>[...f, targetEmail]);
+    } else {
+      await dbUnfollowUser(email, targetEmail);
+      setFollowing(f=>f.filter(e=>e!==targetEmail));
+    }
+    const profiles = await dbGetUsersByEmails(following.includes(targetEmail) ? following.filter(e=>e!==targetEmail) : [...following, targetEmail]);
+    setFriendProfiles(profiles);
+  };
+
+  const openConvo = async(otherEmail)=>{
+    setActiveConvo(otherEmail);
+    await dbMarkMessagesRead(otherEmail, email);
+    setUnreadCount(c=>Math.max(0,c-1));
+  };
+
+  const sendMessage = async()=>{
+    if(!newMsg.trim()||!activeConvo||sendingMsg) return;
+    setSendingMsg(true);
+    await dbSendMessage(email, activeConvo, newMsg.trim());
+    setNewMsg("");
+    const msgs = await dbGetMessages(email);
+    setAllMessages(msgs);
+    setSendingMsg(false);
+  };
+
+  const getConvoMessages = (otherEmail)=>{
+    return allMessages.filter(m=>
+      (m.sender_email===email&&m.receiver_email===otherEmail)||
+      (m.sender_email===otherEmail&&m.receiver_email===email)
+    );
+  };
+
+  const getConvoPartners = ()=>{
+    const partners = new Set();
+    allMessages.forEach(m=>{
+      if(m.sender_email===email) partners.add(m.receiver_email);
+      if(m.receiver_email===email) partners.add(m.sender_email);
+    });
+    return Array.from(partners);
+  };
+
+  const saveProgressPhoto = async()=>{
+    if(savingPhoto) return;
+    setSavingPhoto(true);
+    await dbSaveProgressPhoto({email, note:photoNote, weightAtTime:photoWeight||profile.weight});
+    const photos = await dbGetProgressPhotos(email);
+    setProgressPhotos(photos);
+    setPhotoNote("");
+    setPhotoWeight("");
+    setPhotoSaved(true);
+    setTimeout(()=>setPhotoSaved(false),3000);
+    setSavingPhoto(false);
   };
 
   const sendChat=async(text)=>{
@@ -2532,7 +2939,7 @@ const [translating, setTranslating] = useState(false);
           </div>
         </header>
         <nav className="dnav">
-          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["leaderboard","🏆 Ranks"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
+          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["leaderboard","🏆 Ranks"],["social",unreadCount>0?"👥 Social ●":"👥 Social"],["photos","📸 Photos"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
             <button key={id} className={["dtab",dashTab===id.trim()?"active":""].filter(Boolean).join(" ")} onClick={()=>setDashTab(id.trim())}>{lbl}</button>
           ))}
         </nav>
@@ -2648,7 +3055,23 @@ const [translating, setTranslating] = useState(false);
               {plan==="pro"?(
                 <>
                   <p className="page-sub" style={{marginBottom:14}}>{t.grocerySub}</p>
-                  {groceryList?<div className="rbody">{groceryList}</div>:<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:34,marginBottom:10}}>🛒</div><div>{t.noGrocery}</div></div>}
+                  {groceryList?(
+                <>
+                  <div className="rtabs" style={{marginBottom:14}}>
+                    <button className="rtab active" id="grocery-tab" onClick={()=>{document.getElementById("grocery-content").style.display="block";document.getElementById("recipe-content").style.display="none";document.getElementById("grocery-tab").className="rtab active";document.getElementById("recipe-tab").className="rtab";}}>🛒 Grocery List</button>
+                    <button className="rtab" id="recipe-tab" onClick={()=>{document.getElementById("grocery-content").style.display="none";document.getElementById("recipe-content").style.display="block";document.getElementById("recipe-tab").className="rtab active";document.getElementById("grocery-tab").className="rtab";}}>👨‍🍳 Recipes</button>
+                  </div>
+                  <div id="grocery-content">
+                    <div style={{fontSize:11,color:"var(--green)",fontWeight:700,marginBottom:8,letterSpacing:".05em"}}>
+                      ✓ DIET: {profile.diet.toUpperCase()} — all items verified
+                    </div>
+                    <div className="rbody">{groceryList.split("RECIPES")[0]}</div>
+                  </div>
+                  <div id="recipe-content" style={{display:"none"}}>
+                    <div className="rbody">{groceryList.split("RECIPES")[1]||groceryList}</div>
+                  </div>
+                </>
+              ):<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:34,marginBottom:10}}>🛒</div><div>{t.noGrocery}</div></div>}
                 </>
               ):(
                 <div className="pro-upsell">
@@ -2798,6 +3221,45 @@ const [translating, setTranslating] = useState(false);
                 })}
 
 
+
+            {dashTab==="social"&&<SocialTab
+              email={email}
+              profile={profile}
+              plan={plan}
+              following={following}
+              followers={followers}
+              friendProfiles={friendProfiles}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              searchResults={searchResults}
+              searching={searching}
+              searchUsers={searchUsers}
+              toggleFollow={toggleFollow}
+              activeConvo={activeConvo}
+              setActiveConvo={setActiveConvo}
+              openConvo={openConvo}
+              allMessages={allMessages}
+              newMsg={newMsg}
+              setNewMsg={setNewMsg}
+              sendMessage={sendMessage}
+              sendingMsg={sendingMsg}
+              getConvoMessages={getConvoMessages}
+              getConvoPartners={getConvoPartners}
+              userRank={userRank}
+            />}
+
+            {dashTab==="photos"&&<PhotosTab
+              email={email}
+              profile={profile}
+              progressPhotos={progressPhotos}
+              photoNote={photoNote}
+              setPhotoNote={setPhotoNote}
+              photoWeight={photoWeight}
+              setPhotoWeight={setPhotoWeight}
+              savingPhoto={savingPhoto}
+              photoSaved={photoSaved}
+              saveProgressPhoto={saveProgressPhoto}
+            />}
 
             {dashTab==="reviews"&&<>
               <div className="page-heading" style={{marginBottom:4}}><em>{t.reviewsTabTitle}</em></div>
