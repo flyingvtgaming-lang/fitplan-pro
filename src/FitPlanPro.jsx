@@ -3227,8 +3227,7 @@ const [translating, setTranslating] = useState(false);
               </div>
               <div className="rbody" style={{whiteSpace:"pre-wrap"}}>
                 {resultTab==="workout"?workoutPlan:(
-                  mealPlan.split('
-').map((line,i)=>{
+                  mealPlan.split('\n').map((line,i)=>{
                     if(line.startsWith('[Cal:') || line.startsWith('[DAILY:')){
                       return <div key={i} style={{background:"rgba(0,229,160,0.08)",border:"1px solid rgba(0,229,160,0.15)",borderRadius:6,padding:"4px 8px",margin:"4px 0",fontSize:11,color:"var(--green)",fontFamily:"var(--syne)",fontWeight:600}}>{line}</div>;
                     }
