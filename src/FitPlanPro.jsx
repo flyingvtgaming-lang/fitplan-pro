@@ -1297,7 +1297,7 @@ export default function App(){
               {mealPlan.split("\n").map((line,i)=>{
                 if(line.includes("[Calories:")||line.includes("[DAILY TOTAL")){
                   return <div key={i} style={{background:"var(--bg3)",borderRadius:7,padding:"5px 9px",margin:"3px 0 7px",display:"flex",flexWrap:"wrap",gap:5}}>
-                    {line.replace(/[\[\]]/g,"").split("|").map((p,j)=>{
+                    {line.split("[").join("").split("]").join("").split("|").map((p,j)=>{
                       const colors=["#ff9500","#00b4ff","var(--gold)","#50c878"];
                       return <span key={j} className="meal-macro-pill" style={{background:"rgba(255,255,255,.05)",color:colors[j]||"var(--mu2)"}}>{p.trim()}</span>;
                     })}
