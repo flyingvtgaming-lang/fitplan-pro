@@ -7,6 +7,52 @@ const EMAILJS_SERVICE  = "service_qekk769";
 const EMAILJS_TEMPLATE = "template_h9fye4h";
 const EMAILJS_KEY      = "PbhegEIBztlqMZhI9";
 
+// ── RANK SYSTEM ──
+const RANKS = [
+  { name:"Bronze",   icon:"🥉", min:0,     max:199,   color:"#cd7f32" },
+  { name:"Silver",   icon:"🥈", min:200,   max:499,   color:"#c0c0c0" },
+  { name:"Gold",     icon:"🥇", min:500,   max:999,   color:"#ffd700" },
+  { name:"Platinum", icon:"💎", min:1000,  max:1999,  color:"#e5e4e2" },
+  { name:"Emerald",  icon:"💚", min:2000,  max:3999,  color:"#50c878" },
+  { name:"Diamond",  icon:"💠", min:4000,  max:7999,  color:"#b9f2ff" },
+  { name:"Amethyst", icon:"💜", min:8000,  max:14999, color:"#9966cc" },
+  { name:"Ruby",     icon:"❤️", min:15000, max:29999, color:"#e0115f" },
+  { name:"Top 100",  icon:"👑", min:30000, max:Infinity, color:"#ffd700" },
+];
+
+const DAILY_POINT_CAP = 50;
+
+function getRank(points) {
+  for(let i = RANKS.length-1; i >= 0; i--) {
+    if(points >= RANKS[i].min) return RANKS[i];
+  }
+  return RANKS[0];
+}
+
+function getStartingPoints(level) {
+  if(level === "Advanced") return 300;
+  if(level === "Intermediate") return 100;
+  return 0;
+}
+
+function getPointsForLog(type, dailyPointsToday) {
+  const remaining = Math.max(0, DAILY_POINT_CAP - (dailyPointsToday || 0));
+  if(remaining <= 0) return 0;
+  const base = type === "pr" ? 25 : type === "weight" ? 15 : 10;
+  // diminishing returns: 2nd+ log same day gets half
+  const earned = dailyPointsToday > 0 ? Math.ceil(base / 2) : base;
+  return Math.min(earned, remaining);
+}
+
+function isPlanExpired(planGeneratedAt, plan) {
+  if(plan === "pro") return false;
+  if(!planGeneratedAt) return false;
+  const generated = new Date(planGeneratedAt);
+  const now = new Date();
+  const daysDiff = (now - generated) / (1000 * 60 * 60 * 24);
+  return daysDiff >= 7;
+}
+
 // ── TRANSLATIONS ──
 const T = {
   en: {
@@ -1532,6 +1578,33 @@ async function dbLoadReviews(){
   return data||[];
 }
 
+async function dbUpdatePoints({email, points, rank, streak, last_log_date, daily_points_today, daily_points_date}){
+  const client = await getSupabase();
+  const {error} = await client.from("users").update({
+    points, rank, streak, last_log_date, daily_points_today, daily_points_date
+  }).eq("email", email);
+  if(error) console.error("Points update error:", error);
+}
+
+async function dbMarkExpired(email){
+  const client = await getSupabase();
+  await client.from("users").update({
+    plan_expired: true,
+    expired_at: new Date().toISOString(),
+    upgrade_prompted: true
+  }).eq("email", email);
+}
+
+async function dbLoadLeaderboard(){
+  const client = await getSupabase();
+  const {data, error} = await client.from("users")
+    .select("name, points, rank, streak, plan")
+    .order("points", {ascending: false})
+    .limit(200);
+  if(error) return [];
+  return data || [];
+}
+
 async function dbLogProgress({email, entry, type}){
   const client=await getSupabase();
   const {error}=await client.from("progress_logs").insert({
@@ -1766,6 +1839,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
 .progress-type.cardio{background:rgba(0,180,255,0.15);color:#00b4ff;}
 .progress-type.weight{background:rgba(245,197,66,0.15);color:var(--gold);}
 .saved-flash{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:10px 20px;border-radius:100px;font-family:var(--syne);font-size:13px;font-weight:700;z-index:100;animation:fadeUp .3s ease;}
+.rank-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;font-family:var(--syne);}
+.streak-badge{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;color:#ff6b35;}
+.pro-pill{background:rgba(245,197,66,.15);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;font-family:var(--syne);}
+.leader-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:11px;background:var(--bg2);border:1px solid var(--border);margin-bottom:8px;}
+.leader-pos{font-family:var(--syne);font-size:13px;font-weight:800;color:var(--muted);width:28px;flex-shrink:0;}
+.leader-pos.top3{color:var(--gold);}
+.leader-name{font-family:var(--syne);font-size:13px;font-weight:700;flex:1;}
+.leader-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.leader-pts{font-size:12px;color:var(--muted2);}
+.rank-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
+.rank-tab{padding:6px 12px;border-radius:100px;border:1px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:var(--syne);}
+.rank-tab:hover{border-color:rgba(0,229,160,.3);}
+.rank-tab.active{border-color:var(--green);background:var(--green-bg2);color:var(--green);}
+.points-bar{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+.points-track{height:6px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-top:8px;}
+.points-fill{height:100%;border-radius:4px;transition:width .6s ease;}
+.expired-overlay{position:fixed;inset:0;background:rgba(8,12,16,.97);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
+.expired-card{background:var(--bg2);border:1px solid rgba(245,197,66,.3);border-radius:20px;padding:36px;max-width:440px;width:100%;text-align:center;}
 .trust-bar{display:flex;gap:0;border-top:1px solid var(--border);padding:14px 0 0;margin-top:16px;flex-wrap:wrap;justify-content:center;gap:16px;}
 .trust-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2);}
 .trust-item span{font-size:14px;}
@@ -1780,6 +1871,79 @@ body{background:var(--bg);color:var(--text);font-family:var(--inter);-webkit-fon
   .country-grid{grid-template-columns:1fr;}
 }
 `;
+
+function LeaderboardTab({leaderboard,loadingLeaderboard,userRank,userPoints,userStreak,profileName,plan}){
+  const [lbFilter,setLbFilter]=useState("All");
+  const filtered = lbFilter==="All" ? leaderboard : leaderboard.filter(u=>u.rank===lbFilter);
+  const nextRankIdx = RANKS.findIndex(r=>r.name===userRank.name)+1;
+  const nextRank = RANKS[nextRankIdx]||null;
+  const pct = userRank.max < Infinity
+    ? Math.min(100,((userPoints-userRank.min)/(userRank.max-userRank.min)*100))
+    : 100;
+  return(
+    <>
+      <div className="page-heading" style={{marginBottom:4}}>🏆 <em>Leaderboard</em></div>
+      <p className="page-sub" style={{marginBottom:14}}>See where you rank globally. Top 100 are the elite.</p>
+      <div className="points-bar" style={{marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:24}}>{userRank.icon}</span>
+            <div>
+              <div style={{fontFamily:"var(--syne)",fontSize:15,fontWeight:800,color:userRank.color}}>{userRank.name}</div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>{userPoints} points</div>
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            {userStreak>0&&<div className="streak-badge" style={{fontSize:14}}>🔥 {userStreak} day streak</div>}
+            {nextRank&&<div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{userRank.max-userPoints} pts to {nextRank.icon} {nextRank.name}</div>}
+            {!nextRank&&<div style={{fontSize:11,color:"var(--gold)",marginTop:2}}>Max rank reached! 👑</div>}
+          </div>
+        </div>
+        <div className="points-track">
+          <div className="points-fill" style={{width:pct+"%",background:userRank.color}}/>
+        </div>
+      </div>
+      <div className="rank-tabs">
+        {["All",...RANKS.map(r=>r.name)].map(r=>(
+          <button key={r} className={["rank-tab",lbFilter===r?"active":""].filter(Boolean).join(" ")} onClick={()=>setLbFilter(r)}>
+            {r==="All"?"All Ranks":((RANKS.find(rk=>rk.name===r)?.icon||"")+" "+r)}
+          </button>
+        ))}
+      </div>
+      {loadingLeaderboard?(
+        <div style={{textAlign:"center",padding:30}}><span className="spin"/></div>
+      ):filtered.length===0?(
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+          <div style={{fontSize:30,marginBottom:8}}>🏆</div>
+          <div>No users in this rank yet — be the first!</div>
+        </div>
+      ):filtered.map((u,i)=>{
+        const pos=leaderboard.findIndex(l=>l.name===u.name&&l.points===u.points)+1;
+        const rank=RANKS.find(r=>r.name===u.rank)||RANKS[0];
+        return(
+          <div key={i} className="leader-row" style={{border:u.name===profileName?"1px solid var(--green)":"1px solid var(--border)"}}>
+            <div className={["leader-pos",pos<=3?"top3":""].filter(Boolean).join(" ")}>
+              {pos===1?"🥇":pos===2?"🥈":pos===3?"🥉":"#"+pos}
+            </div>
+            <span style={{fontSize:18}}>{rank.icon}</span>
+            <div className="leader-name">
+              {u.name}
+              {u.name===profileName&&<span style={{fontSize:10,color:"var(--green)",marginLeft:6}}>(you)</span>}
+            </div>
+            <div className="leader-right">
+              {u.streak>0&&<span className="streak-badge">🔥{u.streak}</span>}
+              {u.plan==="pro"&&<span className="pro-pill">PRO</span>}
+              <span className="leader-pts">{u.points} pts</span>
+            </div>
+          </div>
+        );
+      })}
+      {filtered.length>0&&<div style={{textAlign:"center",fontSize:11,color:"var(--muted)",marginTop:8,paddingBottom:8}}>
+        {filtered.length} users shown
+      </div>}
+    </>
+  );
+}
 
 export default function App() {
   const [screen,setScreen]=useState("onboard");
@@ -1841,11 +2005,28 @@ const [translating, setTranslating] = useState(false);
   const [hoverStar,setHoverStar]=useState(0);
   const [loadingReviews,setLoadingReviews]=useState(false);
   const [progressLogs,setProgressLogs]=useState([]);
+  const [userPoints,setUserPoints]=useState(0);
+  const [userRank,setUserRank]=useState(RANKS[0]);
+  const [userStreak,setUserStreak]=useState(0);
+  const [lastLogDate,setLastLogDate]=useState("");
+  const [dailyPointsToday,setDailyPointsToday]=useState(0);
+  const [dailyPointsDate,setDailyPointsDate]=useState("");
+  const [leaderboard,setLeaderboard]=useState([]);
+  const [loadingLeaderboard,setLoadingLeaderboard]=useState(false);
+  const [planExpired,setPlanExpired]=useState(false);
+  const [showExpiredModal,setShowExpiredModal]=useState(false);
   const [loadingProgress,setLoadingProgress]=useState(false);
   const [progressSaved,setProgressSaved]=useState(false);
 
   useEffect(()=>{
     if(dashTab==="reviews") loadReviews();
+    if(dashTab==="leaderboard"){
+      setLoadingLeaderboard(true);
+      dbLoadLeaderboard().then(data=>{
+        setLeaderboard(data);
+        setLoadingLeaderboard(false);
+      });
+    }
     if(dashTab==="progress"){
       setLoadingProgress(true);
       dbLoadProgress(email).then(logs=>{
@@ -1854,6 +2035,20 @@ const [translating, setTranslating] = useState(false);
       });
     }
   },[dashTab, email]);
+  const [planGeneratedAt,setPlanGeneratedAt]=useState("");
+
+  // Check plan expiry on dashboard
+  useEffect(()=>{
+    if(screen==="dashboard"){
+      const expired = isPlanExpired(planGeneratedAt||null, plan);
+      if(expired && plan !== "pro"){
+        setPlanExpired(true);
+        setShowExpiredModal(true);
+        dbMarkExpired(email);
+      }
+    }
+  },[screen, planGeneratedAt]);
+
   useEffect(()=>{
     if(step===2){
       setOnboardReviewsLoading(true);
@@ -2136,6 +2331,14 @@ const [translating, setTranslating] = useState(false);
             setMealPlan(existing.meal_plan||"");
             setGroceryList(existing.grocery_list||"");
             setHasGenerated(true);
+            if(existing.plan_generated_at) setPlanGeneratedAt(existing.plan_generated_at);
+            // load rank/streak/points
+            if(existing.points) setUserPoints(existing.points);
+            if(existing.rank) setUserRank(RANKS.find(r=>r.name===existing.rank)||RANKS[0]);
+            if(existing.streak) setUserStreak(existing.streak);
+            if(existing.last_log_date) setLastLogDate(existing.last_log_date);
+            if(existing.daily_points_today) setDailyPointsToday(existing.daily_points_today);
+            if(existing.daily_points_date) setDailyPointsDate(existing.daily_points_date);
             setTimeout(()=>{setScreen("dashboard");setDashTab("plan");},600);
           } else {
             setTimeout(()=>setStep(1),500);
@@ -2225,13 +2428,71 @@ const [translating, setTranslating] = useState(false);
       const reply=await askClaudeChat(history,sys);
       setMsgs(m=>[...m,{role:"bot",text:reply}]);
 
-      // save progress log to Supabase if it looks like a log entry
+      // award points and save log
       if(isProgressLog && email){
-        const type = text.toLowerCase().includes("weight") || text.toLowerCase().includes("weigh") ? "weight" :
+        const isPR = text.toLowerCase().includes("pr") || text.toLowerCase().includes("personal record") || text.toLowerCase().includes("personal best") || text.toLowerCase().includes("new record");
+        const type = isPR ? "pr" : text.toLowerCase().includes("weight") || text.toLowerCase().includes("weigh") ? "weight" :
                      text.toLowerCase().includes("ran") || text.toLowerCase().includes("km") || text.toLowerCase().includes("miles") ? "cardio" : "workout";
-        await dbLogProgress({email, entry: text, type});
+
+        // streak logic
+        const today = new Date().toISOString().split("T")[0];
+        const yesterday = new Date(Date.now()-86400000).toISOString().split("T")[0];
+        let newStreak = userStreak;
+        if(lastLogDate === today) {
+          // already logged today - streak stays same
+        } else if(lastLogDate === yesterday) {
+          newStreak = userStreak + 1; // consecutive day
+        } else if(lastLogDate === "") {
+          newStreak = 1; // first ever log
+        } else {
+          newStreak = 1; // streak broken - reset
+        }
+
+        // daily cap reset
+        const todayStr = today;
+        const dpToday = dailyPointsDate === todayStr ? dailyPointsToday : 0;
+
+        // streak bonus
+        let bonusPoints = 0;
+        if(newStreak === 7) bonusPoints = 50;
+        if(newStreak === 30) bonusPoints = 150;
+
+        const earned = getPointsForLog(type, dpToday);
+        const totalEarned = earned + bonusPoints;
+        const newPoints = userPoints + totalEarned;
+        const newDailyPoints = Math.min(dpToday + earned, DAILY_POINT_CAP);
+        const newRank = getRank(newPoints);
+
+        setUserPoints(newPoints);
+        setUserRank(newRank);
+        setUserStreak(newStreak);
+        setLastLogDate(today);
+        setDailyPointsToday(newDailyPoints);
+        setDailyPointsDate(todayStr);
+
+        await Promise.all([
+          dbLogProgress({email, entry: text, type}),
+          dbUpdatePoints({
+            email, points: newPoints, rank: newRank.name,
+            streak: newStreak, last_log_date: today,
+            daily_points_today: newDailyPoints, daily_points_date: todayStr
+          })
+        ]);
+
         setProgressSaved(true);
         setTimeout(()=>setProgressSaved(false), 3000);
+
+        // show rank up notification
+        if(newRank.name !== userRank.name){
+          setTimeout(()=>{
+            setMsgs(m=>[...m,{role:"bot",text:"🎉 RANK UP! You just reached " + newRank.icon + " " + newRank.name + "! Keep going!"}]);
+          }, 500);
+        }
+        if(bonusPoints > 0){
+          setTimeout(()=>{
+            setMsgs(m=>[...m,{role:"bot",text:"🔥 " + newStreak + "-day streak bonus! +" + bonusPoints + " points!"}]);
+          }, 800);
+        }
       }
     }catch(e){
       setMsgs(m=>[...m,{role:"bot",text:"Sorry, couldn't connect: "+e.message}]);
@@ -2271,18 +2532,46 @@ const [translating, setTranslating] = useState(false);
       <div className="app">
         <header className="topbar">
           <div className="logo">FitPlan Pro</div>
-          <div className="topbar-right">
-            <span style={{fontSize:13,color:"var(--muted)"}}>Hey, <strong style={{color:"var(--text)"}}>{profile.name}</strong> 👋</span>
-            {plan==="pro"?<span className="pro-badge">PRO</span>:<span className="free-badge">{t.free.toUpperCase()}</span>}
+          <div className="topbar-right" style={{gap:6}}>
+            <span style={{fontSize:18}}>{userRank.icon}</span>
+            {plan==="pro"&&<span className="pro-pill">PRO</span>}
+            {userStreak>0&&<span className="streak-badge">🔥{userStreak}</span>}
+            <span style={{fontSize:13,color:"var(--text)",fontWeight:600}}>{profile.name}</span>
           </div>
         </header>
         <nav className="dnav">
-          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
+          {[[" plan",t.myPlan],["chat",t.aiCoach],["progress","📊 Progress"],["leaderboard","🏆 Ranks"],["grocery",plan==="pro"?t.grocery:t.groceryLocked],["reviews",t.reviews],["profile",t.profileTab]].map(([id,lbl])=>(
             <button key={id} className={["dtab",dashTab===id.trim()?"active":""].filter(Boolean).join(" ")} onClick={()=>setDashTab(id.trim())}>{lbl}</button>
           ))}
         </nav>
 
         {progressSaved&&<div className="saved-flash">💾 Progress logged!</div>}
+
+        {/* PLAN EXPIRED MODAL */}
+        {showExpiredModal&&plan!=="pro"&&(
+          <div className="expired-overlay">
+            <div className="expired-card">
+              <div style={{fontSize:48,marginBottom:16}}>⏰</div>
+              <div style={{fontFamily:"var(--syne)",fontSize:22,fontWeight:800,marginBottom:8}}>Your free plan has expired</div>
+              <div style={{fontSize:14,color:"var(--muted2)",lineHeight:1.6,marginBottom:24}}>
+                Your 7-day free plan ended. Upgrade to Pro to continue accessing your plan, unlock 30-day plans, grocery lists, unlimited regenerations, and more.
+              </div>
+              <div style={{background:"var(--bg3)",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left"}}>
+                {[["✓","30-day meal + workout plan"],["✓","Unlimited regenerations"],["✓","Grocery list"],["✓","AI Coach with rank tracking"],["✓","Keep your rank & streak"]].map(([icon,text])=>(
+                  <div key={text} style={{display:"flex",gap:10,fontSize:13,color:"var(--muted2)",marginBottom:6}}>
+                    <span style={{color:"var(--green)",fontWeight:700}}>{icon}</span>{text}
+                  </div>
+                ))}
+              </div>
+              <button className="btn-gold" style={{width:"100%",marginBottom:12}} onClick={()=>{setShowExpiredModal(false);}}>
+                Upgrade to Pro — $5/mo
+              </button>
+              <button className="btn-s" style={{width:"100%",fontSize:12}} onClick={()=>setShowExpiredModal(false)}>
+                Maybe later (limited access)
+              </button>
+            </div>
+          </div>
+        )}
 
         {showReviewForm&&!reviewSubmitted&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -2381,8 +2670,25 @@ const [translating, setTranslating] = useState(false);
             {dashTab==="progress"&&<>
               <div className="page-heading" style={{marginBottom:4}}>Your <em>Progress</em></div>
               <p className="page-sub" style={{marginBottom:16}}>Logged automatically when you tell your AI Coach about workouts, weight, or cardio.</p>
-              <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 16px",marginBottom:18,fontSize:13,color:"var(--muted2)"}}>
-                💡 <strong style={{color:"var(--text)"}}>How to log:</strong> Just tell your AI Coach things like "I did 3 sets of bench at 185lbs" or "ran 5km today" or "I weigh 172lbs now" — it saves automatically.
+              <div style={{display:"flex",gap:10,marginBottom:14}}>
+                <div style={{flex:1,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:11,padding:"12px",textAlign:"center"}}>
+                  <div style={{fontSize:22,marginBottom:3}}>{userRank.icon}</div>
+                  <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:800,color:userRank.color}}>{userRank.name}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{userPoints} pts</div>
+                </div>
+                <div style={{flex:1,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:11,padding:"12px",textAlign:"center"}}>
+                  <div style={{fontSize:22,marginBottom:3}}>🔥</div>
+                  <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:800}}>{userStreak}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>Day streak</div>
+                </div>
+                <div style={{flex:1,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:11,padding:"12px",textAlign:"center"}}>
+                  <div style={{fontSize:22,marginBottom:3}}>📅</div>
+                  <div style={{fontFamily:"var(--syne)",fontSize:13,fontWeight:800}}>{progressLogs.length}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>Total logs</div>
+                </div>
+              </div>
+              <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:13,color:"var(--muted2)"}}>
+                💡 <strong style={{color:"var(--text)"}}>How to log:</strong> Tell your AI Coach things like "I did 3 sets of bench at 185lbs" or "ran 5km today" or "new PR — squatted 225lbs" — points awarded automatically!
               </div>
               {loadingProgress?(
                 <div style={{textAlign:"center",padding:30}}><span className="spin"/></div>
@@ -2423,6 +2729,84 @@ const [translating, setTranslating] = useState(false);
               )}
             </>}
 
+            {dashTab==="leaderboard"&&<LeaderboardTab
+              leaderboard={leaderboard}
+              loadingLeaderboard={loadingLeaderboard}
+              userRank={userRank}
+              userPoints={userPoints}
+              userStreak={userStreak}
+              profileName={profile.name}
+              plan={plan}
+            />}
+
+                <div className="page-heading" style={{marginBottom:4}}>🏆 <em>Leaderboard</em></div>
+                <p className="page-sub" style={{marginBottom:14}}>See where you rank globally. Top 100 are the elite.</p>
+
+                {/* Your rank card */}
+                <div className="points-bar" style={{marginBottom:16}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:24}}>{userRank.icon}</span>
+                      <div>
+                        <div style={{fontFamily:"var(--syne)",fontSize:15,fontWeight:800}}>{userRank.name}</div>
+                        <div style={{fontSize:11,color:"var(--muted)"}}>{userPoints} points</div>
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      {userStreak>0&&<div className="streak-badge" style={{fontSize:14}}>🔥 {userStreak} day streak</div>}
+                      <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
+                        {userRank.max < Infinity ? (userRank.max - userPoints) + " pts to " + (RANKS[RANKS.findIndex(r=>r.name===userRank.name)+1]||RANKS[RANKS.length-1]).name : "Max rank!"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="points-track">
+                    <div className="points-fill" style={{
+                      width: userRank.max < Infinity ? Math.min(100,((userPoints-userRank.min)/(userRank.max-userRank.min)*100))+"%": "100%",
+                      background: userRank.color
+                    }}/>
+                  </div>
+                </div>
+
+                {/* Filter by rank */}
+                <div className="rank-tabs">
+                  {["All",...RANKS.map(r=>r.name)].map(r=>(
+                    <button key={r} className={["rank-tab",lbFilter===r?"active":""].filter(Boolean).join(" ")} onClick={()=>setLbFilter(r)}>
+                      {r==="All"?"All":RANKS.find(rk=>rk.name===r)?.icon+" "+r}
+                    </button>
+                  ))}
+                </div>
+
+                {loadingLeaderboard?(
+                  <div style={{textAlign:"center",padding:30}}><span className="spin"/></div>
+                ):filtered.length===0?(
+                  <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+                    <div style={{fontSize:30,marginBottom:8}}>🏆</div>
+                    <div>No users in this rank yet — be the first!</div>
+                  </div>
+                ):filtered.map((u,i)=>{
+                  const pos = leaderboard.findIndex(l=>l.name===u.name&&l.points===u.points)+1;
+                  const rank = RANKS.find(r=>r.name===u.rank)||RANKS[0];
+                  return (
+                    <div key={i} className="leader-row" style={{border: u.name===profile.name?"1px solid var(--green)":"1px solid var(--border)"}}>
+                      <div className={["leader-pos",pos<=3?"top3":""].filter(Boolean).join(" ")}>
+                        {pos===1?"🥇":pos===2?"🥈":pos===3?"🥉":"#"+pos}
+                      </div>
+                      <span style={{fontSize:18}}>{rank.icon}</span>
+                      <div className="leader-name">
+                        {u.name}
+                        {u.name===profile.name&&<span style={{fontSize:10,color:"var(--green)",marginLeft:6}}>(you)</span>}
+                      </div>
+                      <div className="leader-right">
+                        {u.streak>0&&<span className="streak-badge">🔥{u.streak}</span>}
+                        {u.plan==="pro"&&<span className="pro-pill">PRO</span>}
+                        <span className="leader-pts">{u.points} pts</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+
+
             {dashTab==="reviews"&&<>
               <div className="page-heading" style={{marginBottom:4}}><em>{t.reviewsTabTitle}</em></div>
               <p className="page-sub" style={{marginBottom:14}}>{t.reviewsTabSub}</p>
@@ -2445,8 +2829,8 @@ const [translating, setTranslating] = useState(false);
               <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:13,padding:16,marginBottom:14}}>
                 {[["Email",email],[t.firstName,profile.name],[t.age,profile.age+" yrs"],[t.weight,profile.weight],[t.level,profile.level],[t.diet,profile.diet],[t.goal,t.goals.find(g=>g.id===goal)?.title||"-"],["Equipment",equip.length+" items"],[t.subscription,plan==="pro"?"PRO — $5/mo":t.free],["Language",LANGUAGES.find(l=>l.code===langCode)?.name||"English"],["Country",country||"-"]].map(([k,v],idx,arr)=>(
                   <div key={k} className="profile-row" style={{borderBottom:idx<arr.length-1?"1px solid var(--border)":"none"}}>
-                    <span style={{fontSize:13,color:"var(--muted)",fontWeight:500}}>{k}</span>
-                    <span style={{fontSize:13,fontWeight:600,color:k===t.subscription&&plan==="pro"?"var(--gold)":"var(--text)"}}>{v}</span>
+                    <span style={{fontSize:13,color:"#9aabb8",fontWeight:500}}>{k}</span>
+                    <span style={{fontSize:13,fontWeight:600,color:k===t.subscription&&plan==="pro"?"var(--gold)":"#f0f4f8"}}>{v}</span>
                   </div>
                 ))}
               </div>
