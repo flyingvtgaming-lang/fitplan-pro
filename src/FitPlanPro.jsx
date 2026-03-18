@@ -3008,9 +3008,7 @@ const [translating, setTranslating] = useState(false);
         "You are a fitness coach summarizing a session. Be concise and factual. Write in third person."
       );
       const newMemory = "["+new Date().toLocaleDateString()+"] "+summary;
-      const fullMemory = (coachMemory ? coachMemory+"
-
-"+newMemory : newMemory).slice(-2000);
+      const fullMemory = (coachMemory ? coachMemory+"\n\n"+newMemory : newMemory).slice(-2000);
       setCoachMemory(fullMemory);
       await dbSaveCoachMemory(email, fullMemory);
     } catch(e){ console.error("Memory save error:", e); }
